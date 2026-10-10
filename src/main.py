@@ -1,10 +1,17 @@
+
 from fastapi import FastAPI
+
+from src.api.users import router as users_router
+from src.api.auth import router as auth_router
 
 app = FastAPI(
     title="OTT Content Aggregator API",
     description="Discover and search movies and TV shows.",
     version="0.1.0",
 )
+
+app.include_router(users_router)
+app.include_router(auth_router)
 
 
 @app.get("/")
