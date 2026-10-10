@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI
 
 from src.api.users import router as users_router
