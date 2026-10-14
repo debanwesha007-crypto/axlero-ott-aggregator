@@ -1,12 +1,14 @@
+
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from src.core.cache import get_redis
 from src.core.database import get_db
 from src.models.content import Content
+from src.models.platform import Platform
 from src.schemas.content import ContentCreate, ContentResponse
 
 
@@ -29,9 +31,30 @@ def invalidate_content_list_cache() -> None:
         for key in keys:
             redis_client.delete(key)
 
-    except Exception:
-        # Keep the API usable if the cache is unavailable.
-        pass
+    except Exception as exc:
+        print(f"Cache invalidation failed: {exc}")
+
+
+def serialize_content(content: Content) -> dict:
+    """Serialize content including its OTT platform name."""
+    return {
+        "id": content.id,
+        "title": content.title,
+        "description": content.description,
+        "content_type": content.content_type,
+        "platform_id": content.platform_id,
+        "platform_name": (
+            content.platform.name if content.platform else None
+        ),
+        "release_year": content.release_year,
+        "genre": content.genre,
+        "poster_url": content.poster_url,
+        "created_at": (
+            content.created_at.isoformat()
+            if content.created_at
+            else None
+        ),
+    }
 
 
 @router.post(
@@ -43,23 +66,47 @@ def create_content(
     payload: ContentCreate,
     db: Session = Depends(get_db),
 ):
+    # Check that the selected platform exists.
+    platform = None
+
+    if payload.platform_id is not None:
+        platform = db.get(Platform, payload.platform_id)
+
+        if platform is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="OTT platform not found",
+            )
+
     content = Content(
         title=payload.title,
         description=payload.description,
         content_type=payload.content_type,
+        platform_id=payload.platform_id,
         release_year=payload.release_year,
         genre=payload.genre,
-        poster_url=str(payload.poster_url) if payload.poster_url else None,
+        poster_url=(
+            str(payload.poster_url)
+            if payload.poster_url
+            else None
+        ),
     )
 
     db.add(content)
     db.commit()
     db.refresh(content)
 
-    # Newly created content may change cached listing results.
+    # Explicitly load the related platform.
+    if content.platform_id is not None:
+        content = db.scalars(
+            select(Content)
+            .options(selectinload(Content.platform))
+            .where(Content.id == content.id)
+        ).one()
+
     invalidate_content_list_cache()
 
-    return content
+    return serialize_content(content)
 
 
 @router.get("/", response_model=list[ContentResponse])
@@ -68,6 +115,7 @@ def list_content(
     content_type: str | None = None,
     genre: str | None = None,
     release_year: int | None = None,
+    platform_id: int | None = Query(default=None, ge=1),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -84,14 +132,14 @@ def list_content(
         f"type={content_type}:"
         f"genre={genre}:"
         f"year={release_year}:"
+        f"platform_id={platform_id}:"
         f"skip={skip}:"
         f"limit={limit}"
     )
 
     redis_client = get_redis()
 
-   
-    # 1. Try cache first.
+    # Try Redis cache first.
     try:
         cached_data = redis_client.get(cache_key)
 
@@ -99,14 +147,15 @@ def list_content(
             print("CACHE HIT")
             return json.loads(cached_data)
 
-    except Exception:
-        # Continue with PostgreSQL if the cache is unavailable.
-        pass
+    except Exception as exc:
+        print(f"Cache read failed: {exc}")
 
-    # 2. Cache miss: query PostgreSQL.
     print("CACHE MISS")
-    query = select(Content)
 
+    query = (
+        select(Content)
+        .options(selectinload(Content.platform))
+    )
 
     if title:
         query = query.where(Content.title.ilike(f"%{title}%"))
@@ -117,8 +166,11 @@ def list_content(
     if genre:
         query = query.where(Content.genre.ilike(f"%{genre}%"))
 
-    if release_year:
+    if release_year is not None:
         query = query.where(Content.release_year == release_year)
+
+    if platform_id is not None:
+        query = query.where(Content.platform_id == platform_id)
 
     items = db.scalars(
         query.order_by(Content.id.desc())
@@ -126,13 +178,22 @@ def list_content(
         .limit(limit)
     ).all()
 
-    # Convert SQLAlchemy objects into JSON-compatible dictionaries.
-    result = [
-        ContentResponse.model_validate(item).model_dump(mode="json")
-        for item in items
-    ]
+    # Temporary debug output to inspect loaded relationships.
+    print(
+        "DEBUG PLATFORM:",
+        [
+            (
+                item.id,
+                item.platform_id,
+                item.platform.name if item.platform else None,
+            )
+            for item in items
+        ],
+    )
 
-    # 3. Store the result for 60 seconds.
+    result = [serialize_content(item) for item in items]
+
+    # Cache the response for 60 seconds.
     try:
         redis_client.setex(
             cache_key,
@@ -140,9 +201,8 @@ def list_content(
             json.dumps(result),
         )
 
-    except Exception:
-        # Return database results even if caching fails.
-        pass
+    except Exception as exc:
+        print(f"Cache write failed: {exc}")
 
     return result
 
@@ -152,7 +212,13 @@ def get_content(
     content_id: int,
     db: Session = Depends(get_db),
 ):
-    content = db.get(Content, content_id)
+    query = (
+        select(Content)
+        .options(selectinload(Content.platform))
+        .where(Content.id == content_id)
+    )
+
+    content = db.scalars(query).first()
 
     if content is None:
         raise HTTPException(
@@ -160,4 +226,4 @@ def get_content(
             detail="Content not found",
         )
 
-    return content
+    return serialize_content(content)
