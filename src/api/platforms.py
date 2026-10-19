@@ -1,4 +1,4 @@
-
+from src.api.auth import get_current_user
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ router = APIRouter(
 def create_platform(
     platform_data: PlatformCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     existing_platform = (
         db.query(Platform)
@@ -50,6 +51,7 @@ def get_platforms(
     skip: int = 0,
     limit: int = 10,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return (
         db.query(Platform)
