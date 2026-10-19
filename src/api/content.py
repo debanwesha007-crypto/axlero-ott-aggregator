@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from src.core.cache import get_redis
 from src.core.database import get_db
+from src.api.auth import get_current_user
 from src.models.content import Content
 from src.models.platform import Platform
 from src.schemas.content import ContentCreate, ContentResponse
@@ -65,6 +66,7 @@ def serialize_content(content: Content) -> dict:
 def create_content(
     payload: ContentCreate,
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     # Check that the selected platform exists.
     platform = None
@@ -119,6 +121,7 @@ def list_content(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     if content_type and content_type not in ("movie", "tv_show"):
         raise HTTPException(
@@ -211,6 +214,7 @@ def list_content(
 def get_content(
     content_id: int,
     db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
 ):
     query = (
         select(Content)

@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.core.database import get_db
+from src.api.auth import get_current_user
 from src.core.security import hash_password
 from src.models.user import User
 from src.schemas.user import UserCreate, UserResponse
