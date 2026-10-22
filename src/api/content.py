@@ -182,26 +182,15 @@ def list_content(
     ).all()
 
     # Temporary debug output to inspect loaded relationships.
-    print(
-        "DEBUG PLATFORM:",
-        [
-            (
-                item.id,
-                item.platform_id,
-                item.platform.name if item.platform else None,
-            )
-            for item in items
-        ],
-    )
-
+   
     result = [serialize_content(item) for item in items]
 
     # Cache the response for 60 seconds.
     try:
-        redis_client.setex(
+               redis_client.set(
             cache_key,
-            CACHE_TTL,
             json.dumps(result),
+            ex=CACHE_TTL,
         )
 
     except Exception as exc:
