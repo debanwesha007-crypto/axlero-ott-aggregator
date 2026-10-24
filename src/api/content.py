@@ -1,13 +1,13 @@
-
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from src.api.auth import get_current_user
 from src.core.cache import get_redis
 from src.core.database import get_db
-from src.api.auth import get_current_user
 from src.models.content import Content
 from src.models.platform import Platform
 from src.schemas.content import ContentCreate, ContentResponse
@@ -18,12 +18,14 @@ router = APIRouter(prefix="/api/content", tags=["Content"])
 CACHE_TTL = 60
 CONTENT_LIST_CACHE_PREFIX = "content:list:"
 
+logger = logging.getLogger(__name__)
+
 
 def invalidate_content_list_cache() -> None:
     """Remove cached content-list responses."""
-    redis_client = get_redis()
-
     try:
+        redis_client = get_redis()
+
         keys = redis_client.scan_iter(
             match=f"{CONTENT_LIST_CACHE_PREFIX}*",
             count=100,
@@ -32,8 +34,8 @@ def invalidate_content_list_cache() -> None:
         for key in keys:
             redis_client.delete(key)
 
-    except Exception as exc:
-        print(f"Cache invalidation failed: {exc}")
+    except Exception:
+        logger.exception("Content-list cache invalidation failed")
 
 
 def serialize_content(content: Content) -> dict:
@@ -66,10 +68,9 @@ def serialize_content(content: Content) -> dict:
 def create_content(
     payload: ContentCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
-    # Check that the selected platform exists.
-    platform = None
+    """Create content after validating its OTT platform."""
 
     if payload.platform_id is not None:
         platform = db.get(Platform, payload.platform_id)
@@ -94,17 +95,25 @@ def create_content(
         ),
     )
 
-    db.add(content)
-    db.commit()
-    db.refresh(content)
+    try:
+        db.add(content)
+        db.commit()
+        db.refresh(content)
 
-    # Explicitly load the related platform.
-    if content.platform_id is not None:
-        content = db.scalars(
-            select(Content)
-            .options(selectinload(Content.platform))
-            .where(Content.id == content.id)
-        ).one()
+        if content.platform_id is not None:
+            content = db.scalars(
+                select(Content)
+                .options(selectinload(Content.platform))
+                .where(Content.id == content.id)
+            ).one()
+
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to create content")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create content",
+        )
 
     invalidate_content_list_cache()
 
@@ -116,13 +125,19 @@ def list_content(
     title: str | None = None,
     content_type: str | None = None,
     genre: str | None = None,
-    release_year: int | None = None,
+    release_year: int | None = Query(
+        default=None,
+        ge=1888,
+        le=2100,
+    ),
     platform_id: int | None = Query(default=None, ge=1),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
+    """Search, filter and paginate content."""
+
     if content_type and content_type not in ("movie", "tv_show"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -140,21 +155,21 @@ def list_content(
         f"limit={limit}"
     )
 
-    redis_client = get_redis()
-
-    # Try Redis cache first.
+    # Attempt to retrieve the response from Redis.
     try:
+        redis_client = get_redis()
         cached_data = redis_client.get(cache_key)
 
         if cached_data is not None:
-            print("CACHE HIT")
+            if isinstance(cached_data, bytes):
+                cached_data = cached_data.decode("utf-8")
+
             return json.loads(cached_data)
 
-    except Exception as exc:
-        print(f"Cache read failed: {exc}")
+    except Exception:
+        logger.exception("Content-list cache read failed")
 
-    print("CACHE MISS")
-
+    # Build the database query.
     query = (
         select(Content)
         .options(selectinload(Content.platform))
@@ -181,20 +196,19 @@ def list_content(
         .limit(limit)
     ).all()
 
-    # Temporary debug output to inspect loaded relationships.
-   
     result = [serialize_content(item) for item in items]
 
     # Cache the response for 60 seconds.
     try:
-               redis_client.set(
+        redis_client = get_redis()
+        redis_client.set(
             cache_key,
             json.dumps(result),
             ex=CACHE_TTL,
         )
 
-    except Exception as exc:
-        print(f"Cache write failed: {exc}")
+    except Exception:
+        logger.exception("Content-list cache write failed")
 
     return result
 
@@ -203,8 +217,10 @@ def list_content(
 def get_content(
     content_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
+    """Retrieve a single content item by ID."""
+
     query = (
         select(Content)
         .options(selectinload(Content.platform))
