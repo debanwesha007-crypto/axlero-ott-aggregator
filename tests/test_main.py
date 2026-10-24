@@ -250,3 +250,31 @@ def test_content_filter_by_platform():
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+def test_content_pagination():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/content/?skip=0&limit=2",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+
+
+def test_content_pagination_skip():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/content/?skip=2&limit=2",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+
