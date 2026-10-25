@@ -277,4 +277,59 @@ def test_content_pagination_skip():
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 1
+    
+def test_content_invalid_type_returns_400():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/content/?content_type=invalid",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_content_invalid_release_year_returns_422():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/content/?release_year=1800",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_content_invalid_platform_id_returns_422():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/content/?platform_id=0",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_content_invalid_pagination_returns_422():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/content/?skip=-1",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_nonexistent_content_returns_404():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/content/99999",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
 
