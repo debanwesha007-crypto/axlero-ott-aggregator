@@ -1,3 +1,4 @@
+from src.models.watchlist import Watchlist
 from fastapi import FastAPI
 from src.api.content import router as content_router
 from src.api.users import router as users_router
