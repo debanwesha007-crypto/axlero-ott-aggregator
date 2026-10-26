@@ -1,3 +1,4 @@
+from src.api.watchlist import router as watchlist_router
 from src.models.watchlist import Watchlist
 from fastapi import FastAPI
 from src.api.content import router as content_router
@@ -15,6 +16,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.include_router(watchlist_router)
 app.include_router(users_router)
 app.include_router(auth_router)
 app.include_router(content_router)
