@@ -332,4 +332,120 @@ def test_nonexistent_content_returns_404():
 
     assert response.status_code == 404
 
+def test_watchlist_requires_authentication():
+    response = client.get("/api/watchlist/")
+    assert response.status_code == 401
+
+
+def test_add_content_to_watchlist():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["content_id"] == 1
+    assert data["user_id"] == 1
+
+
+def test_get_watchlist():
+    token = get_test_token()
+    create_test_content()
+
+    add_response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert add_response.status_code == 201
+
+    response = client.get(
+        "/api/watchlist/",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["title"] == "Inception"
+    assert data[0]["content_type"] == "movie"
+    assert data[0]["platform_name"] == "Netflix"
+
+
+def test_add_duplicate_content_to_watchlist():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    first_response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers=headers,
+    )
+    assert first_response.status_code == 201
+
+    second_response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers=headers,
+    )
+
+    assert second_response.status_code == 409
+
+
+def test_add_nonexistent_content_to_watchlist():
+    token = get_test_token()
+
+    response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 99999},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_remove_content_from_watchlist():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    add_response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers=headers,
+    )
+    assert add_response.status_code == 201
+
+    delete_response = client.delete(
+        "/api/watchlist/1",
+        headers=headers,
+    )
+
+    assert delete_response.status_code == 204
+
+    list_response = client.get(
+        "/api/watchlist/",
+        headers=headers,
+    )
+
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+
+def test_remove_nonexistent_watchlist_item():
+    token = get_test_token()
+
+    response = client.delete(
+        "/api/watchlist/99999",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
 
