@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -181,3 +181,59 @@ def delete_review(
     db.commit()
 
     return None
+@router.get(
+    "/content/{content_id}/summary",
+    tags=["Review Summary"],
+)
+def get_content_review_summary(
+    content_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the average rating, total reviews, and rating distribution."""
+
+    content = db.get(Content, content_id)
+
+    if content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found",
+        )
+
+    summary = db.execute(
+        select(
+            func.avg(Review.rating),
+            func.count(Review.id),
+        ).where(Review.content_id == content_id)
+    ).one()
+
+    average_rating, total_reviews = summary
+
+    distribution_rows = db.execute(
+        select(
+            Review.rating,
+            func.count(Review.id),
+        )
+        .where(Review.content_id == content_id)
+        .group_by(Review.rating)
+    ).all()
+
+    rating_distribution = {
+        str(rating): count
+        for rating, count in distribution_rows
+    }
+
+    # Include all ratings from 1 to 5, even when their count is zero.
+    for rating in range(1, 6):
+        rating_distribution.setdefault(str(rating), 0)
+
+    return {
+        "content_id": content_id,
+        "average_rating": (
+            round(float(average_rating), 2)
+            if average_rating is not None
+            else None
+        ),
+        "total_reviews": total_reviews,
+        "rating_distribution": rating_distribution,
+    }

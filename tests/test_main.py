@@ -711,5 +711,121 @@ def test_user_cannot_update_another_users_review():
     )
 
     assert update_response.status_code == 404
+# ---------------- Review Summary API Tests ----------------
 
+
+def test_review_summary_with_multiple_reviews():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Create the first review.
+    first_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 5,
+            "review_text": "Excellent",
+        },
+        headers=headers,
+    )
+    assert first_response.status_code == 201
+
+    # Create another user so the second review is from a different user.
+    from src.models.user import User
+
+    db = TestingSessionLocal()
+    try:
+        second_user = User(
+            name="Second User",
+            email="seconduser@example.com",
+            password_hash=hash_password("SecondPass123"),
+        )
+        db.add(second_user)
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "seconduser@example.com",
+            "password": "SecondPass123",
+        },
+    )
+    assert login_response.status_code == 200
+    second_token = login_response.json()["access_token"]
+
+    second_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 3,
+            "review_text": "Good",
+        },
+        headers={"Authorization": f"Bearer {second_token}"},
+    )
+    assert second_response.status_code == 201
+
+    response = client.get(
+        "/api/reviews/content/1/summary",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["content_id"] == 1
+    assert data["average_rating"] == 4.0
+    assert data["total_reviews"] == 2
+    assert data["rating_distribution"] == {
+        "1": 0,
+        "2": 0,
+        "3": 1,
+        "4": 0,
+        "5": 1,
+    }
+
+
+def test_review_summary_without_reviews():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/reviews/content/1/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["content_id"] == 1
+    assert data["average_rating"] is None
+    assert data["total_reviews"] == 0
+    assert data["rating_distribution"] == {
+        "1": 0,
+        "2": 0,
+        "3": 0,
+        "4": 0,
+        "5": 0,
+    }
+
+
+def test_review_summary_for_nonexistent_content():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/reviews/content/99999/summary",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_review_summary_requires_authentication():
+    create_test_content()
+
+    response = client.get("/api/reviews/content/1/summary")
+
+    assert response.status_code == 401
 
