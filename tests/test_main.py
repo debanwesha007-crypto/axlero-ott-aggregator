@@ -448,4 +448,268 @@ def test_remove_nonexistent_watchlist_item():
 
     assert response.status_code == 404
 
+    # ---------------- Reviews API Tests ----------------
+
+
+def test_reviews_require_authentication():
+    response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 5,
+            "review_text": "Excellent movie",
+        },
+    )
+    assert response.status_code == 401
+
+
+def test_create_review():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 5,
+            "review_text": "Excellent movie",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["content_id"] == 1
+    assert data["rating"] == 5
+    assert data["review_text"] == "Excellent movie"
+    assert data["user_id"] == 1
+
+
+@pytest.mark.parametrize("rating", [0, 6, -1])
+def test_invalid_review_rating(rating):
+    token = get_test_token()
+    create_test_content()
+
+    response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": rating,
+            "review_text": "Invalid rating",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_duplicate_review_is_rejected():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {
+        "content_id": 1,
+        "rating": 4,
+        "review_text": "Good movie",
+    }
+
+    first_response = client.post(
+        "/api/reviews/",
+        json=payload,
+        headers=headers,
+    )
+    assert first_response.status_code == 201
+
+    second_response = client.post(
+        "/api/reviews/",
+        json=payload,
+        headers=headers,
+    )
+    assert second_response.status_code == 409
+
+
+def test_review_for_nonexistent_content_returns_404():
+    token = get_test_token()
+
+    response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 99999,
+            "rating": 4,
+            "review_text": "Not found",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_get_content_reviews():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 5,
+            "review_text": "Amazing",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+
+    response = client.get(
+        "/api/reviews/content/1",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["rating"] == 5
+    assert data[0]["review_text"] == "Amazing"
+
+
+def test_get_my_reviews():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 4,
+            "review_text": "Worth watching",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+
+    response = client.get(
+        "/api/reviews/my",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["content_id"] == 1
+    assert data[0]["rating"] == 4
+
+
+def test_update_own_review():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 3,
+            "review_text": "It was okay",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    review_id = create_response.json()["id"]
+
+    response = client.put(
+        f"/api/reviews/{review_id}",
+        json={
+            "rating": 5,
+            "review_text": "Actually, it was excellent",
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["rating"] == 5
+    assert response.json()["review_text"] == "Actually, it was excellent"
+
+
+def test_delete_own_review():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    create_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 4,
+            "review_text": "Good",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    review_id = create_response.json()["id"]
+
+    delete_response = client.delete(
+        f"/api/reviews/{review_id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 204
+
+    list_response = client.get(
+        "/api/reviews/my",
+        headers=headers,
+    )
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+
+def test_user_cannot_update_another_users_review():
+    first_token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {first_token}"}
+
+    create_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 1,
+            "rating": 4,
+            "review_text": "Original review",
+        },
+        headers=headers,
+    )
+    assert create_response.status_code == 201
+    review_id = create_response.json()["id"]
+
+    # Create a second user directly in the test database.
+    from src.models.user import User
+
+    db = TestingSessionLocal()
+    try:
+        second_user = User(
+            name="Second User",
+            email="seconduser@example.com",
+            password_hash=hash_password("SecondPass123"),
+        )
+        db.add(second_user)
+        db.commit()
+    finally:
+        db.close()
+
+    login_response = client.post(
+        "/api/auth/login",
+        json={
+            "email": "seconduser@example.com",
+            "password": "SecondPass123",
+        },
+    )
+    assert login_response.status_code == 200
+    second_token = login_response.json()["access_token"]
+
+    update_response = client.put(
+        f"/api/reviews/{review_id}",
+        json={"rating": 1},
+        headers={"Authorization": f"Bearer {second_token}"},
+    )
+
+    assert update_response.status_code == 404
+
 
