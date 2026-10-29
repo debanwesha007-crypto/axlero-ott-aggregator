@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from src.models.review import Review
 
 from src.main import app
 from src.core.database import Base, get_db
@@ -829,3 +830,159 @@ def test_review_summary_requires_authentication():
 
     assert response.status_code == 401
 
+# ---------------- Recommendations API Tests ----------------
+
+
+def test_recommendations_require_authentication():
+    response = client.get("/api/recommendations/")
+    assert response.status_code == 401
+
+
+def test_recommendations_match_watchlist_genre():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Add Inception to the user's watchlist.
+    watchlist_response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers=headers,
+    )
+    assert watchlist_response.status_code == 201
+
+    response = client.get(
+        "/api/recommendations/",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+
+    # Interstellar has the same genre as Inception.
+    recommended_ids = [item["id"] for item in data]
+    assert 2 in recommended_ids
+    assert 1 not in recommended_ids
+
+
+def test_recommendations_exclude_watchlisted_content():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers=headers,
+    )
+
+    response = client.get(
+        "/api/recommendations/",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    recommended_ids = [item["id"] for item in response.json()]
+    assert 1 not in recommended_ids
+
+
+def test_recommendations_empty_watchlist_returns_empty_list():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/recommendations/",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_recommendations_limit_is_respected():
+    token = get_test_token()
+    create_test_content()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Inception and Interstellar share the Science Fiction genre.
+    client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers=headers,
+    )
+
+    response = client.get(
+        "/api/recommendations/?limit=1",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) <= 1
+    # ---------------- Recommendation Rating Sorting Test ----------------
+
+def test_recommendations_sort_by_average_rating():
+    token = get_test_token()
+    create_test_content()
+
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Add Inception (ID 1) to the watchlist.
+    watchlist_response = client.post(
+        "/api/watchlist/",
+        json={"content_id": 1},
+        headers=headers,
+    )
+    assert watchlist_response.status_code == 201
+
+    # Give Interstellar (ID 2) a 3-star rating.
+    review_response = client.post(
+        "/api/reviews/",
+        json={
+            "content_id": 2,
+            "rating": 3,
+            "review_text": "Good movie",
+        },
+        headers=headers,
+    )
+    assert review_response.status_code == 201
+
+    # Create another user so the same content can receive
+    # a second review without violating the unique constraint.
+    from src.models.user import User
+
+    db = TestingSessionLocal()
+    try:
+        second_user = User(
+    name="Second Test User",
+    email="second-test@example.com",
+    password_hash=hash_password("TestPassword123!"),
+)
+        db.add(second_user)
+        db.commit()
+        db.refresh(second_user)
+
+        db.add(
+            Review(
+                user_id=second_user.id,
+                content_id=2,
+                rating=5,
+                review_text="Excellent movie",
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    # Get recommendations.
+    response = client.get(
+        "/api/recommendations/",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    recommendations = response.json()
+    assert len(recommendations) == 1
+    assert recommendations[0]["id"] == 2
+    assert recommendations[0]["average_rating"] == 4.0
+    assert recommendations[0]["review_count"] == 2

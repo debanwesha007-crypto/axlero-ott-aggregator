@@ -7,6 +7,7 @@ from src.api.reviews import router as reviews_router
 from src.api.users import router as users_router
 from src.api.watchlist import router as watchlist_router
 from src.core.database import Base, engine
+from src.api.recommendations import router as recommendations_router
 
 # Import models so SQLAlchemy registers all database tables.
 from src.models.content import Content
@@ -28,6 +29,7 @@ app.include_router(users_router)
 app.include_router(content_router)
 app.include_router(platforms_router)
 app.include_router(watchlist_router)
+app.include_router(recommendations_router)
 app.include_router(reviews_router)
 
 
