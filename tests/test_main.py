@@ -986,3 +986,96 @@ def test_recommendations_sort_by_average_rating():
     assert recommendations[0]["id"] == 2
     assert recommendations[0]["average_rating"] == 4.0
     assert recommendations[0]["review_count"] == 2
+    # ---------------- Content Sorting Tests ----------------
+
+
+def test_content_sort_by_title_ascending():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/content/?sort_by=title&sort_order=asc",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    titles = [item["title"] for item in response.json()]
+    assert titles == ["Inception", "Interstellar", "The Office"]
+
+
+def test_content_sort_by_title_descending():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/content/?sort_by=title&sort_order=desc",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    titles = [item["title"] for item in response.json()]
+    assert titles == ["The Office", "Interstellar", "Inception"]
+
+
+def test_content_sort_by_release_year_ascending():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/content/?sort_by=release_year&sort_order=asc",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    years = [item["release_year"] for item in response.json()]
+    assert years == [2005, 2010, 2014]
+
+
+def test_content_sort_by_release_year_descending():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/content/?sort_by=release_year&sort_order=desc",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    years = [item["release_year"] for item in response.json()]
+    assert years == [2014, 2010, 2005]
+
+
+def test_content_sort_invalid_sort_by_returns_422():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/content/?sort_by=invalid",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_content_sort_invalid_sort_order_returns_422():
+    token = get_test_token()
+
+    response = client.get(
+        "/api/content/?sort_order=invalid",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_content_default_sort_is_newest_first():
+    token = get_test_token()
+    create_test_content()
+
+    response = client.get(
+        "/api/content/",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    titles = [item["title"] for item in response.json()]
+    assert titles == ["The Office", "Interstellar", "Inception"]

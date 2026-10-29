@@ -5,12 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from src.api.auth import get_current_user
 from src.core.cache import get_redis
 from src.core.database import get_db
+from src.api.auth import get_current_user
 from src.models.content import Content
 from src.models.platform import Platform
-from src.schemas.content import ContentCreate, ContentResponse
 
 
 router = APIRouter(prefix="/api/content", tags=["Content"])
@@ -21,14 +20,16 @@ CONTENT_LIST_CACHE_PREFIX = "content:list:"
 logger = logging.getLogger(__name__)
 
 
-def invalidate_content_list_cache() -> None:
-    """Remove cached content-list responses."""
+def invalidate_content_list_cache():
+    """Invalidate cached content-list responses after content changes."""
     try:
         redis_client = get_redis()
 
+        if redis_client is None:
+            return
+
         keys = redis_client.scan_iter(
-            match=f"{CONTENT_LIST_CACHE_PREFIX}*",
-            count=100,
+            match=f"{CONTENT_LIST_CACHE_PREFIX}*"
         )
 
         for key in keys:
@@ -39,7 +40,7 @@ def invalidate_content_list_cache() -> None:
 
 
 def serialize_content(content: Content) -> dict:
-    """Serialize content including its OTT platform name."""
+    """Convert a Content model into a JSON-serializable dictionary."""
     return {
         "id": content.id,
         "title": content.title,
@@ -60,67 +61,53 @@ def serialize_content(content: Content) -> dict:
     }
 
 
-@router.post(
-    "/",
-    response_model=ContentResponse,
-    status_code=status.HTTP_201_CREATED,
-)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 def create_content(
-    payload: ContentCreate,
+    content_data: dict,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Create content after validating its OTT platform."""
+    """Create content and invalidate cached content-list responses."""
+    platform_id = content_data.get("platform_id")
 
-    if payload.platform_id is not None:
-        platform = db.get(Platform, payload.platform_id)
+    if platform_id is not None:
+        platform = db.get(Platform, platform_id)
 
         if platform is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="OTT platform not found",
+                detail="Platform not found",
             )
 
-    content = Content(
-        title=payload.title,
-        description=payload.description,
-        content_type=payload.content_type,
-        platform_id=payload.platform_id,
-        release_year=payload.release_year,
-        genre=payload.genre,
-        poster_url=(
-            str(payload.poster_url)
-            if payload.poster_url
-            else None
-        ),
-    )
-
     try:
+        content = Content(**content_data)
         db.add(content)
         db.commit()
         db.refresh(content)
 
+        # Reload platform information for the response.
         if content.platform_id is not None:
-            content = db.scalars(
-                select(Content)
-                .options(selectinload(Content.platform))
-                .where(Content.id == content.id)
-            ).one()
+            db.refresh(content)
 
-    except Exception:
+        invalidate_content_list_cache()
+
+        return serialize_content(content)
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as exc:
         db.rollback()
         logger.exception("Failed to create content")
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create content",
-        )
-
-    invalidate_content_list_cache()
-
-    return serialize_content(content)
+        ) from exc
 
 
-@router.get("/", response_model=list[ContentResponse])
+@router.get("/")
 def list_content(
     title: str | None = None,
     content_type: str | None = None,
@@ -130,20 +117,41 @@ def list_content(
         ge=1888,
         le=2100,
     ),
-    platform_id: int | None = Query(default=None, ge=1),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=10, ge=1, le=100),
+    platform_id: int | None = Query(
+        default=None,
+        ge=1,
+    ),
+    skip: int = Query(
+        default=0,
+        ge=0,
+    ),
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+    ),
+    sort_by: str = Query(
+        default="id",
+        pattern="^(id|title|release_year)$",
+    ),
+    sort_order: str = Query(
+        default="desc",
+        pattern="^(asc|desc)$",
+    ),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Search, filter and paginate content."""
-
-    if content_type and content_type not in ("movie", "tv_show"):
+    """Search, filter, sort, paginate, and cache content."""
+    if content_type is not None and content_type not in {
+        "movie",
+        "tv_show",
+    }:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="content_type must be 'movie' or 'tv_show'",
         )
 
+    # Include every filter and sorting option in the cache key.
     cache_key = (
         f"{CONTENT_LIST_CACHE_PREFIX}"
         f"title={title}:"
@@ -152,60 +160,95 @@ def list_content(
         f"year={release_year}:"
         f"platform_id={platform_id}:"
         f"skip={skip}:"
-        f"limit={limit}"
+        f"limit={limit}:"
+        f"sort_by={sort_by}:"
+        f"sort_order={sort_order}"
     )
 
-    # Attempt to retrieve the response from Redis.
+    # Try Redis cache first.
     try:
         redis_client = get_redis()
-        cached_data = redis_client.get(cache_key)
 
-        if cached_data is not None:
-            if isinstance(cached_data, bytes):
-                cached_data = cached_data.decode("utf-8")
+        if redis_client is not None:
+            cached_data = redis_client.get(cache_key)
 
-            return json.loads(cached_data)
+            if cached_data:
+                if isinstance(cached_data, bytes):
+                    cached_data = cached_data.decode("utf-8")
+
+                return json.loads(cached_data)
 
     except Exception:
         logger.exception("Content-list cache read failed")
 
     # Build the database query.
-    query = (
-        select(Content)
-        .options(selectinload(Content.platform))
+    query = select(Content).options(
+        selectinload(Content.platform)
     )
 
     if title:
-        query = query.where(Content.title.ilike(f"%{title}%"))
+        query = query.where(
+            Content.title.ilike(f"%{title}%")
+        )
 
     if content_type:
-        query = query.where(Content.content_type == content_type)
+        query = query.where(
+            Content.content_type == content_type
+        )
 
     if genre:
-        query = query.where(Content.genre.ilike(f"%{genre}%"))
+        query = query.where(
+            Content.genre.ilike(f"%{genre}%")
+        )
 
     if release_year is not None:
-        query = query.where(Content.release_year == release_year)
+        query = query.where(
+            Content.release_year == release_year
+        )
 
     if platform_id is not None:
-        query = query.where(Content.platform_id == platform_id)
+        query = query.where(
+            Content.platform_id == platform_id
+        )
 
-    items = db.scalars(
-        query.order_by(Content.id.desc())
-        .offset(skip)
-        .limit(limit)
-    ).all()
+    # Map allowed sort fields to database columns.
+    sort_columns = {
+        "id": Content.id,
+        "title": Content.title,
+        "release_year": Content.release_year,
+    }
 
-    result = [serialize_content(item) for item in items]
+    sort_column = sort_columns[sort_by]
 
-    # Cache the response for 60 seconds.
+    if sort_order == "asc":
+        query = query.order_by(sort_column.asc())
+    else:
+        query = query.order_by(sort_column.desc())
+
+    # Use ID as a deterministic tie-breaker for other sort fields.
+    if sort_by != "id":
+        query = query.order_by(Content.id.desc())
+
+    # Apply pagination after filtering and sorting.
+    query = query.offset(skip).limit(limit)
+
+    content_items = db.scalars(query).all()
+
+    result = [
+        serialize_content(content)
+        for content in content_items
+    ]
+
+    # Cache the response for the configured TTL.
     try:
         redis_client = get_redis()
-        redis_client.set(
-            cache_key,
-            json.dumps(result),
-            ex=CACHE_TTL,
-        )
+
+        if redis_client is not None:
+            redis_client.set(
+                cache_key,
+                json.dumps(result),
+                ex=CACHE_TTL,
+            )
 
     except Exception:
         logger.exception("Content-list cache write failed")
@@ -213,14 +256,13 @@ def list_content(
     return result
 
 
-@router.get("/{content_id}", response_model=ContentResponse)
+@router.get("/{content_id}")
 def get_content(
     content_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """Retrieve a single content item by ID."""
-
     query = (
         select(Content)
         .options(selectinload(Content.platform))
