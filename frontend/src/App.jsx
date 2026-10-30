@@ -330,13 +330,28 @@ function App() {
           </div>
 
           <label className="search-box">
-            <span>⌕</span>
+            <span aria-hidden="true">⌕</span>
+
             <input
               type="search"
               placeholder="Search movies, shows..."
+              aria-label="Search movies, shows, genres, and streaming platforms"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+
+            {search && (
+              <button
+                type="button"
+                className="search-clear"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                title="Clear search"
+              >
+                ×
+              </button>
+            )}
+
             <kbd>⌘ K</kbd>
           </label>
 
@@ -348,7 +363,6 @@ function App() {
             ♡
             {watchlist.length > 0 && <span />}
           </button>
-
           <button
             className="top-avatar"
             onClick={token ? disconnectBackend : connectBackend}
