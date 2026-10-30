@@ -15,6 +15,7 @@ from src.models.platform import Platform
 from src.models.review import Review
 from src.models.user import User
 from src.models.watchlist import Watchlist
+from fastapi.middleware.cors import CORSMiddleware
 
 Base.metadata.create_all(bind=engine)
 
@@ -22,6 +23,16 @@ app = FastAPI(
     title="OTT Content Aggregator API",
     description="Discover and search movies and TV shows.",
     version="0.1.0",
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth_router)
