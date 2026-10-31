@@ -50,3 +50,47 @@ export function removeFromWatchlist(token, contentId) {
     method: "DELETE",
   });
 }
+export function getContentReviews(token, contentId) {
+  return apiRequest(
+    `/api/reviews/content/${contentId}`,
+    token,
+  )
+}
+
+export function getReviewSummary(token, contentId) {
+  return apiRequest(
+    `/api/reviews/content/${contentId}/summary`,
+    token,
+  )
+}
+
+export function getMyReviews(token) {
+  return apiRequest('/api/reviews/my', token)
+}
+
+export function createReview(token, contentId, rating, reviewText) {
+  return apiRequest('/api/reviews/', token, {
+    method: 'POST',
+    body: JSON.stringify({
+      content_id: contentId,
+      rating,
+      review_text: reviewText || null,
+    }),
+  })
+}
+
+export function updateReview(token, reviewId, rating, reviewText) {
+  return apiRequest(`/api/reviews/${reviewId}`, token, {
+    method: 'PUT',
+    body: JSON.stringify({
+      rating,
+      review_text: reviewText || null,
+    }),
+  })
+}
+
+export function deleteReview(token, reviewId) {
+  return apiRequest(`/api/reviews/${reviewId}`, token, {
+    method: 'DELETE',
+  })
+}
