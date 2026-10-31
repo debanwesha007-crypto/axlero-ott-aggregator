@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   getContent,
   getWatchlist,
@@ -22,6 +22,8 @@ function getMovieStyle(title = '') {
 }
 
 function App() {
+  const searchInputRef = useRef(null)
+
   const [movies, setMovies] = useState([])
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('All')
@@ -38,6 +40,7 @@ function App() {
   const [watchlistError, setWatchlistError] = useState('')
   const [updatingMovieId, setUpdatingMovieId] = useState(null)
 
+  // Load content from the backend
   useEffect(() => {
     if (!token) {
       setMovies([])
@@ -86,6 +89,7 @@ function App() {
     }
   }, [token])
 
+  // Load the user's watchlist
   useEffect(() => {
     if (!token) {
       setWatchlist([])
@@ -125,6 +129,25 @@ function App() {
       cancelled = true
     }
   }, [token])
+
+  // Focus the search field with Ctrl + K or Cmd + K
+  useEffect(() => {
+    function handleSearchShortcut(event) {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.key.toLowerCase() === 'k'
+      ) {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+
+    window.addEventListener('keydown', handleSearchShortcut)
+
+    return () => {
+      window.removeEventListener('keydown', handleSearchShortcut)
+    }
+  }, [])
 
   const categories = useMemo(() => {
     const genres = movies
@@ -334,6 +357,7 @@ function App() {
 
             <input
               type="search"
+              ref={searchInputRef}
               placeholder="Search movies, shows..."
               aria-label="Search movies, shows, genres, and streaming platforms"
               value={search}
