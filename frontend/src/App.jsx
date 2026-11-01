@@ -1,4 +1,4 @@
- import { useEffect, useMemo, useState } from 'react'
+ import { useState, useEffect, useRef } from 'react'
  import {
    getContent,
    getWatchlist,
@@ -29,6 +29,21 @@
  function App() {
    const [movies, setMovies] = useState([])
    const [search, setSearch] = useState('')
+   const searchInputRef = useRef(null)
+   useEffect(() => {
+  const handleSearchShortcut = (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+  }
+
+  window.addEventListener('keydown', handleSearchShortcut)
+
+  return () => {
+    window.removeEventListener('keydown', handleSearchShortcut)
+  }
+}, [])
    const [category, setCategory] = useState('All')
    const [activePage, setActivePage] = useState('Home')
    const [watchlist, setWatchlist] = useState([])
@@ -36,8 +51,14 @@
    const [token, setToken] = useState(
      () => localStorage.getItem('axlero_token') || '',
    )
- 
-   const [loading, setLoading] = useState(false)
+   const [loading, setLoading] = useState(
+   <input
+  type="search"
+  ref={searchInputRef}
+  placeholder="Search movies, shows..."
+  value={search}
+  onChange={(event) => setSearch(event.target.value)}
+/>
    const [error, setError] = useState('')
    const [watchlistLoading, setWatchlistLoading] = useState(false)
    const [watchlistError, setWatchlistError] = useState('')
@@ -449,8 +470,18 @@
                placeholder="Search movies, shows..."
                value={search}
                onChange={(event) => setSearch(event.target.value)}
-             />
-             <kbd>⌘ K</kbd>
+             {search && (
+  <button
+    type="button"
+    className="search-clear"
+    onClick={() => setSearch('')}
+    aria-label="Clear search"
+    title="Clear search"
+  >
+    ×
+  </button>
+)}
+<kbd>⌘ K</kbd>
            </label>
  
            <button
