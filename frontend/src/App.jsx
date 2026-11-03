@@ -128,11 +128,17 @@ function App() {
     let cancelled = false;
 
     const loadContent = async () => {
-      try {
+  if (!token) {
+    setMovies([]);
+    setLoading(false);
+    return;
+  }
+
+  try {
         setLoading(true);
         setError("");
 
-        const response = await getContent();
+        const response = await getContent(token);
 
         const content = Array.isArray(response)
           ? response
@@ -169,7 +175,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [token]);
 
   // --------------------------------------------------
   // Load watchlist
@@ -188,7 +194,7 @@ function App() {
         setWatchlistLoading(true);
         setWatchlistError("");
 
-        const response = await getWatchlist();
+        const response = await getWatchlist(token);
 
         const items = Array.isArray(response)
           ? response
