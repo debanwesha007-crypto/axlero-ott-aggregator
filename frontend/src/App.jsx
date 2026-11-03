@@ -5,6 +5,8 @@ import {
   addToWatchlist,
   removeFromWatchlist,
   getReviews,
+  getReviewSummary,
+  getMyReviews,
   createReview,
   updateReview,
   deleteReview,
@@ -127,14 +129,14 @@ function App() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadContent = async () => {
-  if (!token) {
-    setMovies([]);
-    setLoading(false);
-    return;
-  }
+     const loadContent = async () => {
+      if (!token) {
+        setMovies([]);
+        setLoading(false);
+        return;
+      }
 
-  try {
+      try {
         setLoading(true);
         setError("");
 
@@ -239,7 +241,7 @@ function App() {
     let cancelled = false;
 
     const loadReviews = async () => {
-      if (!selectedMovie) {
+      if (!selectedMovie || !token) {
         setReviews([]);
         setReviewSummary(null);
         setReviewsError("");
@@ -247,6 +249,7 @@ function App() {
         setEditingReviewId(null);
         setReviewText("");
         setReviewRating(5);
+        setReviewsLoading(false);
         return;
       }
 
@@ -254,21 +257,19 @@ function App() {
         setReviewsLoading(true);
         setReviewsError("");
 
-        const response = await getReviews(selectedMovie.id);
-
-        const reviewItems = Array.isArray(response)
-          ? response
-          : response?.reviews || response?.items || [];
+        const [reviewItems, summary, myReviews] = await Promise.all([
+          getReviews(token, selectedMovie.id),
+          getReviewSummary(token, selectedMovie.id),
+          getMyReviews(token),
+        ]);
 
         if (!cancelled) {
-          setReviews(reviewItems);
-          setReviewSummary(response?.summary || null);
+          setReviews(Array.isArray(reviewItems) ? reviewItems : []);
+          setReviewSummary(summary);
 
-          const ownReview = reviewItems.find(
+          const ownReview = myReviews.find(
             (review) =>
-              review.is_own_review ||
-              review.is_current_user ||
-              review.own_review
+              Number(review.content_id) === Number(selectedMovie.id)
           );
 
           setMyReviewId(ownReview?.id ?? null);
@@ -276,9 +277,7 @@ function App() {
       } catch (err) {
         if (!cancelled) {
           setReviewsError(
-            err?.response?.data?.detail ||
-              err.message ||
-              "Failed to load reviews."
+            err.message || "Failed to load reviews."
           );
         }
       } finally {
@@ -293,41 +292,37 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedMovie]);
+  }, [selectedMovie, token]);
 
   // --------------------------------------------------
   // Refresh reviews
   // --------------------------------------------------
 
   const refreshReviews = async () => {
-    if (!selectedMovie) return;
+    if (!selectedMovie || !token) return;
 
     try {
       setReviewsLoading(true);
       setReviewsError("");
 
-      const response = await getReviews(selectedMovie.id);
+      const [reviewItems, summary, myReviews] = await Promise.all([
+        getReviews(token, selectedMovie.id),
+        getReviewSummary(token, selectedMovie.id),
+        getMyReviews(token),
+      ]);
 
-      const reviewItems = Array.isArray(response)
-        ? response
-        : response?.reviews || response?.items || [];
+      setReviews(Array.isArray(reviewItems) ? reviewItems : []);
+      setReviewSummary(summary);
 
-      setReviews(reviewItems);
-      setReviewSummary(response?.summary || null);
-
-      const ownReview = reviewItems.find(
+      const ownReview = myReviews.find(
         (review) =>
-          review.is_own_review ||
-          review.is_current_user ||
-          review.own_review
+          Number(review.content_id) === Number(selectedMovie.id)
       );
 
       setMyReviewId(ownReview?.id ?? null);
     } catch (err) {
       setReviewsError(
-        err?.response?.data?.detail ||
-          err.message ||
-          "Failed to refresh reviews."
+        err.message || "Failed to refresh reviews."
       );
     } finally {
       setReviewsLoading(false);
@@ -340,77 +335,79 @@ function App() {
 
   const submitReview = async (event) => {
     event.preventDefault();
+  if (!selectedMovie || !token) return;
 
-    if (!selectedMovie || !token) return;
+  try {
+    setReviewSubmitting(true);
+    setReviewsError("");
 
-    try {
-      setReviewSubmitting(true);
-      setReviewsError("");
+    const rating = Number(reviewRating);
+    const reviewTextValue = reviewText.trim();
 
-      const payload = {
-        rating: Number(reviewRating),
-        comment: reviewText.trim(),
-      };
-
-      if (editingReviewId) {
-        await updateReview(editingReviewId, payload);
-      } else {
-        await createReview(selectedMovie.id, payload);
-      }
-
-      setReviewText("");
-      setReviewRating(5);
-      setEditingReviewId(null);
-
-      await refreshReviews();
-    } catch (err) {
-      setReviewsError(
-        err?.response?.data?.detail ||
-          err.message ||
-          "Failed to submit review."
+    if (editingReviewId) {
+      await updateReview(
+        token,
+        editingReviewId,
+        rating,
+        reviewTextValue
       );
-    } finally {
-      setReviewSubmitting(false);
+    } else {
+      await createReview(
+        token,
+        selectedMovie.id,
+        rating,
+        reviewTextValue
+      );
     }
-  };
+
+    setReviewText("");
+    setReviewRating(5);
+    setEditingReviewId(null);
+
+    await refreshReviews();
+  } catch (err) {
+    setReviewsError(
+      err.message || "Failed to submit review."
+    );
+  } finally {
+    setReviewSubmitting(false);
+  }
+};
+
 
   // --------------------------------------------------
   // Delete review
   // --------------------------------------------------
 
   const removeReview = async (reviewId) => {
-    if (!reviewId) return;
+    if (!reviewId || !token) return;
 
-    try {
-      setReviewsError("");
+  try {
+    setReviewsError("");
 
-      await deleteReview(reviewId);
+    await deleteReview(token, reviewId);
 
-      setMyReviewId(null);
-      setEditingReviewId(null);
-      setReviewText("");
-      setReviewRating(5);
+    setMyReviewId(null);
+    setEditingReviewId(null);
+    setReviewText("");
+    setReviewRating(5);
 
-      await refreshReviews();
-    } catch (err) {
-      setReviewsError(
-        err?.response?.data?.detail ||
-          err.message ||
-          "Failed to delete review."
-      );
-    }
-  };
+    await refreshReviews();
+  } catch (err) {
+    setReviewsError(
+      err.message || "Failed to delete review."
+    );
+  }
+};
 
   // --------------------------------------------------
   // Edit review
   // --------------------------------------------------
-
   const beginEditReview = (review) => {
-    setEditingReviewId(review.id);
-    setReviewRating(Number(review.rating) || 5);
-    setReviewText(review.comment || review.text || "");
+  setEditingReviewId(review.id);
+  setReviewRating(Number(review.rating) || 5);
+  setReviewText(review.review_text || "");
   };
-
   // --------------------------------------------------
   // Categories
   // --------------------------------------------------
@@ -551,13 +548,13 @@ function App() {
       );
 
       if (isSaved) {
-        await removeFromWatchlist(movieId);
+        await removeFromWatchlist(token, movieId);
 
         setWatchlist((previous) =>
           previous.filter((id) => Number(id) !== movieId)
         );
       } else {
-        await addToWatchlist(movieId);
+        await addToWatchlist(token, movieId);
 
         setWatchlist((previous) => [
           ...previous,
