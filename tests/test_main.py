@@ -1067,7 +1067,12 @@ def test_content_sort_invalid_sort_order_returns_422():
     assert response.status_code == 422
 
 
-def test_content_default_sort_is_newest_first():
+def test_content_default_sort_is_newest_first(monkeypatch):
+    import src.api.content as content_api
+
+    # Disable Redis cache for this test to keep it deterministic.
+    monkeypatch.setattr(content_api, "get_redis", lambda: None)
+
     token = get_test_token()
     create_test_content()
 

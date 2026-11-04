@@ -10,11 +10,14 @@ import {
   createReview,
   updateReview,
   deleteReview,
+  getMe,
+  loginUser,
 } from "./api";
+
 import "./App.css";
 
 // --------------------------------------------------
-// Movie card styles
+// Helpers
 // --------------------------------------------------
 
 const getMovieStyle = (title) => {
@@ -53,19 +56,77 @@ const getMovieStyle = (title) => {
   );
 };
 
+const getResponseItems = (response, keys = []) => {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  for (const key of keys) {
+    if (Array.isArray(response?.[key])) {
+      return response[key];
+    }
+  }
+
+  return [];
+};
+
+const getWatchlistId = (item) => {
+  if (item && typeof item === "object") {
+    return item.content_id ?? item.id ?? null;
+  }
+
+  return item ?? null;
+};
+
+const sameId = (first, second) => {
+  if (first == null || second == null) {
+    return false;
+  }
+
+  return String(first) === String(second);
+};
+
+const getErrorMessage = (error, fallback) => {
+  return (
+    error?.response?.data?.detail ||
+    error?.message ||
+    fallback
+  );
+};
+
 // --------------------------------------------------
 // Main App
 // --------------------------------------------------
 
 function App() {
+  // Navigation
+  const [activePage, setActivePage] = useState("home");
+  const [activeCategory, setActiveCategory] = useState("All");
+
   // Content and search
   const [movies, setMovies] = useState([]);
   const [search, setSearch] = useState("");
   const searchInputRef = useRef(null);
 
-  // Navigation and filters
-  const [category, setCategory] = useState("All");
-  const [activePage, setActivePage] = useState("Home");
+  // Backend status
+  const [backendConnected, setBackendConnected] = useState(false);
+
+  // Authentication
+  const [token, setToken] = useState(
+    () => localStorage.getItem("axlero_token") || ""
+  );
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  // User profile
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+
+  // Content loading
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // Watchlist
   const [watchlist, setWatchlist] = useState([]);
@@ -75,15 +136,6 @@ function App() {
 
   // Selected movie
   const [selectedMovie, setSelectedMovie] = useState(null);
-
-  // Backend authentication
-  const [token, setToken] = useState(
-    () => localStorage.getItem("axlero_token") || ""
-  );
-
-  // Content loading and errors
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   // Reviews
   const [reviews, setReviews] = useState([]);
@@ -123,16 +175,65 @@ function App() {
   }, []);
 
   // --------------------------------------------------
-  // Load content from backend
+  // Load user profile
   // --------------------------------------------------
 
   useEffect(() => {
     let cancelled = false;
 
-     const loadContent = async () => {
+    const loadProfile = async () => {
+      if (!token) {
+        setProfile(null);
+        setProfileError("");
+        setProfileLoading(false);
+        setBackendConnected(false);
+        return;
+      }
+
+      try {
+        setProfileLoading(true);
+        setProfileError("");
+
+        const response = await getMe(token);
+
+        if (!cancelled) {
+          setProfile(response);
+          setBackendConnected(true);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setProfile(null);
+          setBackendConnected(false);
+          setProfileError(
+            getErrorMessage(err, "Failed to load profile.")
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setProfileLoading(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // --------------------------------------------------
+  // Load content
+  // --------------------------------------------------
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadContent = async () => {
       if (!token) {
         setMovies([]);
         setLoading(false);
+        setError("");
         return;
       }
 
@@ -141,10 +242,7 @@ function App() {
         setError("");
 
         const response = await getContent(token);
-
-        const content = Array.isArray(response)
-          ? response
-          : response?.items || response?.content || [];
+        const content = getResponseItems(response, ["items", "content"]);
 
         const formattedMovies = content.map((item) => ({
           ...item,
@@ -160,10 +258,9 @@ function App() {
       } catch (err) {
         if (!cancelled) {
           setError(
-            err?.response?.data?.detail ||
-              err.message ||
-              "Failed to load content."
+            getErrorMessage(err, "Failed to load content.")
           );
+          setMovies([]);
         }
       } finally {
         if (!cancelled) {
@@ -189,6 +286,8 @@ function App() {
     const loadWatchlist = async () => {
       if (!token) {
         setWatchlist([]);
+        setWatchlistLoading(false);
+        setWatchlistError("");
         return;
       }
 
@@ -197,16 +296,14 @@ function App() {
         setWatchlistError("");
 
         const response = await getWatchlist(token);
+        const items = getResponseItems(response, [
+          "items",
+          "watchlist",
+        ]);
 
-        const items = Array.isArray(response)
-          ? response
-          : response?.items || response?.watchlist || [];
-
-        const ids = items.map((item) =>
-          typeof item === "object"
-            ? item.content_id ?? item.id
-            : item
-        );
+        const ids = items
+          .map(getWatchlistId)
+          .filter((id) => id != null);
 
         if (!cancelled) {
           setWatchlist(ids);
@@ -214,9 +311,7 @@ function App() {
       } catch (err) {
         if (!cancelled) {
           setWatchlistError(
-            err?.response?.data?.detail ||
-              err.message ||
-              "Failed to load watchlist."
+            getErrorMessage(err, "Failed to load watchlist.")
           );
         }
       } finally {
@@ -257,27 +352,36 @@ function App() {
         setReviewsLoading(true);
         setReviewsError("");
 
-        const [reviewItems, summary, myReviews] = await Promise.all([
-          getReviews(token, selectedMovie.id),
-          getReviewSummary(token, selectedMovie.id),
-          getMyReviews(token),
+        const [reviewsResponse, summaryResponse, myReviewsResponse] =
+          await Promise.all([
+            getReviews(token, selectedMovie.id),
+            getReviewSummary(token, selectedMovie.id),
+            getMyReviews(token),
+          ]);
+
+        const reviewItems = getResponseItems(reviewsResponse, [
+          "reviews",
+          "items",
         ]);
 
+        const myReviews = getResponseItems(myReviewsResponse, [
+          "reviews",
+          "items",
+        ]);
+
+        const ownReview = myReviews.find((review) =>
+          sameId(review.content_id, selectedMovie.id)
+        );
+
         if (!cancelled) {
-          setReviews(Array.isArray(reviewItems) ? reviewItems : []);
-          setReviewSummary(summary);
-
-          const ownReview = myReviews.find(
-            (review) =>
-              Number(review.content_id) === Number(selectedMovie.id)
-          );
-
+          setReviews(reviewItems);
+          setReviewSummary(summaryResponse);
           setMyReviewId(ownReview?.id ?? null);
         }
       } catch (err) {
         if (!cancelled) {
           setReviewsError(
-            err.message || "Failed to load reviews."
+            getErrorMessage(err, "Failed to load reviews.")
           );
         }
       } finally {
@@ -299,30 +403,41 @@ function App() {
   // --------------------------------------------------
 
   const refreshReviews = async () => {
-    if (!selectedMovie || !token) return;
+    if (!selectedMovie || !token) {
+      return;
+    }
 
     try {
       setReviewsLoading(true);
       setReviewsError("");
 
-      const [reviewItems, summary, myReviews] = await Promise.all([
-        getReviews(token, selectedMovie.id),
-        getReviewSummary(token, selectedMovie.id),
-        getMyReviews(token),
+      const [reviewsResponse, summaryResponse, myReviewsResponse] =
+        await Promise.all([
+          getReviews(token, selectedMovie.id),
+          getReviewSummary(token, selectedMovie.id),
+          getMyReviews(token),
+        ]);
+
+      const reviewItems = getResponseItems(reviewsResponse, [
+        "reviews",
+        "items",
       ]);
 
-      setReviews(Array.isArray(reviewItems) ? reviewItems : []);
-      setReviewSummary(summary);
+      const myReviews = getResponseItems(myReviewsResponse, [
+        "reviews",
+        "items",
+      ]);
 
-      const ownReview = myReviews.find(
-        (review) =>
-          Number(review.content_id) === Number(selectedMovie.id)
+      const ownReview = myReviews.find((review) =>
+        sameId(review.content_id, selectedMovie.id)
       );
 
+      setReviews(reviewItems);
+      setReviewSummary(summaryResponse);
       setMyReviewId(ownReview?.id ?? null);
     } catch (err) {
       setReviewsError(
-        err.message || "Failed to refresh reviews."
+        getErrorMessage(err, "Failed to refresh reviews.")
       );
     } finally {
       setReviewsLoading(false);
@@ -335,237 +450,300 @@ function App() {
 
   const submitReview = async (event) => {
     event.preventDefault();
-  if (!selectedMovie || !token) return;
 
-  try {
-    setReviewSubmitting(true);
-    setReviewsError("");
-
-    const rating = Number(reviewRating);
-    const reviewTextValue = reviewText.trim();
-
-    if (editingReviewId) {
-      await updateReview(
-        token,
-        editingReviewId,
-        rating,
-        reviewTextValue
-      );
-    } else {
-      await createReview(
-        token,
-        selectedMovie.id,
-        rating,
-        reviewTextValue
-      );
+    if (!selectedMovie || !token) {
+      setReviewsError("Please sign in to submit a review.");
+      return;
     }
 
-    setReviewText("");
-    setReviewRating(5);
-    setEditingReviewId(null);
+    try {
+      setReviewSubmitting(true);
+      setReviewsError("");
 
-    await refreshReviews();
-  } catch (err) {
-    setReviewsError(
-      err.message || "Failed to submit review."
-    );
-  } finally {
-    setReviewSubmitting(false);
-  }
-};
+      const rating = Number(reviewRating);
+      const reviewTextValue = reviewText.trim();
 
+      if (editingReviewId) {
+        await updateReview(
+          token,
+          editingReviewId,
+          rating,
+          reviewTextValue
+        );
+      } else {
+        await createReview(
+          token,
+          selectedMovie.id,
+          rating,
+          reviewTextValue
+        );
+      }
+
+      setReviewText("");
+      setReviewRating(5);
+      setEditingReviewId(null);
+
+      await refreshReviews();
+    } catch (err) {
+      setReviewsError(
+        getErrorMessage(err, "Failed to submit review.")
+      );
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   // --------------------------------------------------
   // Delete review
   // --------------------------------------------------
 
   const removeReview = async (reviewId) => {
-    if (!reviewId || !token) return;
+    if (!reviewId || !token) {
+      return;
+    }
 
-  try {
-    setReviewsError("");
+    try {
+      setReviewsError("");
 
-    await deleteReview(token, reviewId);
+      await deleteReview(token, reviewId);
 
-    setMyReviewId(null);
-    setEditingReviewId(null);
-    setReviewText("");
-    setReviewRating(5);
+      setMyReviewId(null);
+      setEditingReviewId(null);
+      setReviewText("");
+      setReviewRating(5);
 
-    await refreshReviews();
-  } catch (err) {
-    setReviewsError(
-      err.message || "Failed to delete review."
-    );
-  }
-};
+      await refreshReviews();
+    } catch (err) {
+      setReviewsError(
+        getErrorMessage(err, "Failed to delete review.")
+      );
+    }
+  };
 
   // --------------------------------------------------
   // Edit review
   // --------------------------------------------------
+
   const beginEditReview = (review) => {
-  setEditingReviewId(review.id);
-  setReviewRating(Number(review.rating) || 5);
-  setReviewText(review.review_text || "");
+    setEditingReviewId(review.id);
+    setReviewRating(Number(review.rating) || 5);
+    setReviewText(review.review_text || "");
   };
+
   // --------------------------------------------------
   // Categories
   // --------------------------------------------------
 
   const categories = useMemo(() => {
-    const allGenres = movies.flatMap((movie) =>
-      (movie.genre || "")
-        .split(",")
-        .map((genre) => genre.trim())
-        .filter(Boolean)
-    );
+    const uniqueCategories = new Set();
 
-    return ["All", ...new Set(allGenres)];
+    movies.forEach((movie) => {
+      const rawCategory = movie.category || movie.genre || "";
+
+      String(rawCategory)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+        .forEach((item) => uniqueCategories.add(item));
+    });
+
+    return ["All", ...Array.from(uniqueCategories)];
   }, [movies]);
 
   // --------------------------------------------------
-  // Filter movies
+  // Filter content
   // --------------------------------------------------
 
   const filteredMovies = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const normalizedSearch = search.trim().toLowerCase();
 
     return movies.filter((movie) => {
+      const title = String(movie.title || "").toLowerCase();
+      const platform = String(
+        movie.platform_name || movie.platform || ""
+      ).toLowerCase();
+
+      const rawCategory = movie.category || movie.genre || "";
+
+      const movieCategories = String(rawCategory)
+        .split(",")
+        .map((item) => item.trim());
+
       const matchesSearch =
-        !query ||
-        movie.title?.toLowerCase().includes(query) ||
-        movie.description?.toLowerCase().includes(query) ||
-        movie.genre?.toLowerCase().includes(query) ||
-        movie.platform?.toLowerCase().includes(query);
+        !normalizedSearch ||
+        title.includes(normalizedSearch) ||
+        platform.includes(normalizedSearch);
 
       const matchesCategory =
-        category === "All" ||
-        (movie.genre || "")
-          .toLowerCase()
-          .split(",")
-          .map((genre) => genre.trim())
-          .includes(category.toLowerCase());
+        activeCategory === "All" ||
+        movieCategories.includes(activeCategory);
 
       return matchesSearch && matchesCategory;
     });
-  }, [movies, search, category]);
+  }, [movies, search, activeCategory]);
 
   // --------------------------------------------------
-  // Recommendations based on watchlist genres
+  // Recommendations and hero
   // --------------------------------------------------
 
   const recommendedMovies = useMemo(() => {
-    const savedIds = new Set(watchlist.map(Number));
-
-    const savedMovies = movies.filter((movie) =>
-      savedIds.has(Number(movie.id))
-    );
-
-    const savedGenres = new Set(
-      savedMovies.flatMap((movie) =>
-        (movie.genre || "")
-          .split(",")
-          .map((genre) => genre.trim().toLowerCase())
-          .filter(Boolean)
-      )
-    );
-
-    const candidates = movies.filter(
-      (movie) => !savedIds.has(Number(movie.id))
-    );
-
-    // If the user has no saved genres, show some available content.
-    if (savedGenres.size === 0) {
-      return candidates.slice(0, 8);
-    }
-
-    return candidates
-      .map((movie) => {
-        const movieGenres = (movie.genre || "")
-          .split(",")
-          .map((genre) => genre.trim().toLowerCase())
-          .filter(Boolean);
-
-        const score = movieGenres.reduce(
-          (total, genre) =>
-            total + (savedGenres.has(genre) ? 1 : 0),
-          0
-        );
-
-        return {
-          ...movie,
-          recommendationScore: score,
-        };
-      })
-      .filter((movie) => movie.recommendationScore > 0)
-      .sort(
-        (a, b) =>
-          b.recommendationScore - a.recommendationScore
-      )
-      .slice(0, 8);
-  }, [movies, watchlist]);
-
-  // --------------------------------------------------
-  // Hero movie
-  // --------------------------------------------------
+    return movies.slice(0, 6);
+  }, [movies]);
 
   const heroMovie = useMemo(() => {
-    return movies[0] || null;
+    return (
+      movies.find(
+        (movie) => movie.backdrop_url || movie.poster_url
+      ) || movies[0]
+    );
   }, [movies]);
+
+  // --------------------------------------------------
+  // Login
+  // --------------------------------------------------
+
+  const handleLogin = async (event) => {
+    event.preventDefault();
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await loginUser(
+        loginEmail.trim(),
+        loginPassword
+      );
+
+      const accessToken = data?.access_token;
+
+      if (!accessToken) {
+        throw new Error(
+          "Login response did not contain an access token."
+        );
+      }
+
+      localStorage.setItem("axlero_token", accessToken);
+      setToken(accessToken);
+
+      const userProfile = await getMe(accessToken);
+
+      setProfile(userProfile);
+      setBackendConnected(true);
+      setShowLogin(false);
+      setLoginPassword("");
+      setProfileError("");
+    } catch (err) {
+      localStorage.removeItem("axlero_token");
+      setToken("");
+      setProfile(null);
+      setBackendConnected(false);
+
+      setError(
+        getErrorMessage(err, "Login failed. Please try again.")
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // --------------------------------------------------
   // Backend connection
   // --------------------------------------------------
 
-  const connectBackend = (newToken) => {
-    if (!newToken) return;
+  const connectBackend = async () => {
+    if (!token) {
+      setError("Please sign in first to connect your backend.");
+      setBackendConnected(false);
+      setShowLogin(true);
+      return;
+    }
 
-    localStorage.setItem("axlero_token", newToken);
-    setToken(newToken);
+    try {
+      setLoading(true);
+      setError("");
+
+      const userProfile = await getMe(token);
+
+      setProfile(userProfile);
+      setBackendConnected(true);
+    } catch (err) {
+      setBackendConnected(false);
+      setError(
+        getErrorMessage(
+          err,
+          "Unable to connect to the backend. Please try again."
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const disconnectBackend = () => {
     localStorage.removeItem("axlero_token");
+
     setToken("");
+    setProfile(null);
+    setBackendConnected(false);
     setWatchlist([]);
+    setReviews([]);
+    setReviewSummary(null);
+    setMyReviewId(null);
+    setShowLogin(false);
   };
 
   // --------------------------------------------------
-  // Toggle watchlist
+  // Watchlist toggle
   // --------------------------------------------------
 
   const toggleWatchlist = async (movie) => {
-    if (!token || !movie) return;
+    if (!token) {
+      setWatchlistError(
+        "Please sign in to manage your watchlist."
+      );
+      setShowLogin(true);
+      return;
+    }
 
-    const movieId = Number(movie.id);
+    const movieId = movie.id;
+
+    if (movieId == null) {
+      setWatchlistError("This title does not have a valid ID.");
+      return;
+    }
+
+    const isSaved = watchlist.some((item) =>
+      sameId(getWatchlistId(item), movieId)
+    );
+
+    setUpdatingMovieId(movieId);
+    setWatchlistError("");
 
     try {
-      setUpdatingMovieId(movieId);
-      setWatchlistError("");
-
-      const isSaved = watchlist.some(
-        (id) => Number(id) === movieId
-      );
-
       if (isSaved) {
         await removeFromWatchlist(token, movieId);
 
         setWatchlist((previous) =>
-          previous.filter((id) => Number(id) !== movieId)
+          previous.filter(
+            (item) => !sameId(getWatchlistId(item), movieId)
+          )
         );
       } else {
         await addToWatchlist(token, movieId);
 
-        setWatchlist((previous) => [
-          ...previous,
-          movieId,
-        ]);
+        setWatchlist((previous) => {
+          const alreadySaved = previous.some((item) =>
+            sameId(getWatchlistId(item), movieId)
+          );
+
+          return alreadySaved
+            ? previous
+            : [...previous, movieId];
+        });
       }
     } catch (err) {
       setWatchlistError(
-        err?.response?.data?.detail ||
-          err.message ||
-          "Failed to update watchlist."
+        getErrorMessage(err, "Could not update your watchlist.")
       );
     } finally {
       setUpdatingMovieId(null);
@@ -578,87 +756,99 @@ function App() {
 
   const navigateTo = (page) => {
     setActivePage(page);
-    setCategory("All");
     setSearch("");
+    setActiveCategory("All");
   };
 
-  const pageTitle =
-    activePage === "Home"
-      ? "Explore"
-      : activePage === "Discover"
-      ? "Discover"
-      : activePage === "Watchlist"
-      ? "My Watchlist"
-      : "Recommendations";
+  const pageTitle = {
+    home: "Discover",
+    browse: "Explore Movies & Shows",
+    watchlist: "My Watchlist",
+    profile: "My Profile",
+  }[activePage] || "Discover";
+
+  const watchlistMovies = useMemo(() => {
+    return watchlist
+      .map((item) => {
+        const id = getWatchlistId(item);
+
+        return movies.find((movie) => sameId(movie.id, id));
+      })
+      .filter(Boolean);
+  }, [watchlist, movies]);
 
   // --------------------------------------------------
-  // Part 2 starts here: return (...)
+  // Render
   // --------------------------------------------------
-    return (
-    <div className="app">
-      {/* Sidebar */}
+
+  return (
+    <div className="app-shell">
       <aside className="sidebar">
-        <div className="sidebar-logo">
-          <span className="logo-icon">A</span>
-          <span className="logo-text">Axlero</span>
+        <div className="brand">
+          <div className="brand-icon">A</div>
+          <span className="brand-name">Axlero</span>
         </div>
 
-        <div className="sidebar-section">
-          <p className="sidebar-label">MENU</p>
+        <div className="sidebar-label">MENU</div>
 
+        <nav className="side-nav">
           <button
             className={`nav-item ${
-              activePage === "Home" ? "active" : ""
+              activePage === "home" ? "active" : ""
             }`}
-            onClick={() => navigateTo("Home")}
+            onClick={() => navigateTo("home")}
           >
-            <span>⌂</span>
+            <span className="nav-icon">⌂</span>
             <span>Home</span>
           </button>
 
           <button
             className={`nav-item ${
-              activePage === "Discover" ? "active" : ""
+              activePage === "browse" ? "active" : ""
             }`}
-            onClick={() => navigateTo("Discover")}
+            onClick={() => navigateTo("browse")}
           >
-            <span>⌕</span>
-            <span>Discover</span>
+            <span className="nav-icon">▦</span>
+            <span>Browse</span>
           </button>
 
           <button
             className={`nav-item ${
-              activePage === "Watchlist" ? "active" : ""
+              activePage === "watchlist" ? "active" : ""
             }`}
-            onClick={() => navigateTo("Watchlist")}
+            onClick={() => navigateTo("watchlist")}
           >
-            <span>♡</span>
-            <span>Watchlist</span>
-            <span className="nav-count">{watchlist.length}</span>
+            <span className="nav-icon">♡</span>
+            <span>My Watchlist</span>
           </button>
 
           <button
             className={`nav-item ${
-              activePage === "Recommendations" ? "active" : ""
+              activePage === "profile" ? "active" : ""
             }`}
-            onClick={() => navigateTo("Recommendations")}
+            onClick={() => navigateTo("profile")}
           >
-            <span>✦</span>
-            <span>Recommendations</span>
+            <span className="nav-icon">♙</span>
+            <span>Profile</span>
           </button>
-        </div>
+        </nav>
 
-        <div className="sidebar-section">
-          <p className="sidebar-label">PLATFORMS</p>
+        <div className="sidebar-label">STREAMING PLATFORMS</div>
 
-          {["Netflix", "Prime Video", "Max"].map((platform) => (
+        <div className="platform-list">
+          {[
+            "Netflix",
+            "Prime Video",
+            "Disney+",
+            "Hulu",
+            "Apple TV+",
+          ].map((platform) => (
             <button
               key={platform}
-              className="nav-item"
+              className="platform-item"
               onClick={() => {
-                setActivePage("Discover");
                 setSearch(platform);
-                setCategory("All");
+                setActivePage("browse");
               }}
             >
               <span className="platform-dot" />
@@ -668,38 +858,46 @@ function App() {
         </div>
 
         <div className="sidebar-bottom">
-          {token ? (
-            <>
-              <p className="connection-status">
-                <span className="status-dot connected" />
-                Backend connected
-              </p>
+          <div className="connection-status">
+            <span
+              className={`status-dot ${
+                backendConnected ? "connected" : "disconnected"
+              }`}
+            />
 
-              <button
-                className="nav-item"
-                onClick={disconnectBackend}
-              >
-                <span>↪</span>
-                <span>Disconnect</span>
-              </button>
-            </>
+            <span>
+              {backendConnected
+                ? "Backend connected"
+                : "Backend disconnected"}
+            </span>
+          </div>
+
+          {backendConnected ? (
+            <button
+              className="sidebar-action"
+              onClick={disconnectBackend}
+            >
+              Disconnect
+            </button>
           ) : (
-            <p className="connection-status">
-              <span className="status-dot disconnected" />
-              Not connected
-            </p>
+            <button
+              className="sidebar-action"
+              onClick={() => setShowLogin(true)}
+              disabled={loading}
+            >
+              Sign in
+            </button>
           )}
         </div>
       </aside>
 
-      {/* Main content */}
       <main className="main-content">
-        {/* Topbar */}
         <header className="topbar">
-          <div className="breadcrumb">
-            <span>Axlero</span>
-            <span className="breadcrumb-divider">/</span>
-            <span>{pageTitle}</span>
+          <div className="topbar-title">
+            <span className="topbar-eyebrow">
+              AXLERO STREAMING
+            </span>
+            <h1>{pageTitle}</h1>
           </div>
 
           <div className="topbar-actions">
@@ -711,694 +909,729 @@ function App() {
                 type="text"
                 placeholder="Search movies, shows..."
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
               />
-
-              {search && (
-                <button
-                  className="search-clear"
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                >
-                  ×
-                </button>
-              )}
 
               <span className="search-shortcut">⌘ K</span>
             </div>
+
+            <button
+              className="profile-button"
+              onClick={() => navigateTo("profile")}
+              title="Open profile"
+            >
+              {profile?.name?.charAt(0)?.toUpperCase() || "U"}
+            </button>
           </div>
         </header>
 
-        {/* Welcome section */}
-        <section className="welcome-section">
-          <div>
-            <p className="welcome-eyebrow">YOUR STREAMING HUB</p>
-            <h1>{pageTitle}</h1>
-            <p className="welcome-description">
-              Find your next favourite movie or show.
-            </p>
-          </div>
-        </section>
-
-        {/* Backend connection message */}
-        {!token && (
-          <div className="backend-notice">
+        <div className="page-content">
+          <section className="welcome-row">
             <div>
-              <strong>Connect your account</strong>
-              <p>
-                Sign in to use your watchlist and submit reviews.
+              <p className="welcome-eyebrow">
+                YOUR ENTERTAINMENT, UNIFIED
               </p>
-            </div>
 
-            <button
-              className="secondary-button"
-              onClick={() => {
-                const newToken = window.prompt(
-                  "Enter your backend access token:"
-                );
-
-                if (newToken) {
-                  connectBackend(newToken.trim());
-                }
-              }}
-            >
-              Connect
-            </button>
-          </div>
-        )}
-
-        {/* Home hero */}
-        {activePage === "Home" && heroMovie && !search && (
-          <section className="hero-section">
-            <div
-              className="hero-background"
-              style={{
-                background:
-                  heroMovie.style?.color ||
-                  "linear-gradient(135deg, #1e293b, #020617)",
-              }}
-            >
-              <div className="hero-overlay">
-                <div className="hero-content">
-                  <span className="hero-badge">
-                    FEATURED
-                  </span>
-
-                  <h2>{heroMovie.title}</h2>
-
-                  <div className="hero-meta">
-                    <span>{heroMovie.year}</span>
-                    <span>•</span>
-                    <span>{heroMovie.type}</span>
-                    <span>•</span>
-                    <span>{heroMovie.platform}</span>
-                  </div>
-
-                  <p>
-                    {heroMovie.description ||
-                      "Discover this title on Axlero."}
-                  </p>
-
-                  <div className="hero-actions">
-                    <button
-                      className="primary-button"
-                      onClick={() => setSelectedMovie(heroMovie)}
-                    >
-                      View Details
-                    </button>
-
-                    <button
-                      className="secondary-button"
-                      onClick={() => toggleWatchlist(heroMovie)}
-                      disabled={
-                        !token ||
-                        updatingMovieId === Number(heroMovie.id)
-                      }
-                    >
-                      {watchlist.some(
-                        (id) => Number(id) === Number(heroMovie.id)
-                      )
-                        ? "✓ In Watchlist"
-                        : "+ Add to Watchlist"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* Error messages */}
-        {error && (
-          <div className="error-message">
-            <strong>Unable to load content</strong>
-            <p>{error}</p>
-          </div>
-        )}
-
-        {watchlistError && (
-          <div className="error-message">
-            <p>{watchlistError}</p>
-          </div>
-        )}
-
-        {/* Catalog */}
-        <section className="catalog-section">
-          <div className="catalog-header">
-            <div>
               <h2>
-                {activePage === "Watchlist"
-                  ? "Your Saved Titles"
-                  : activePage === "Recommendations"
-                  ? "Picked For You"
-                  : activePage === "Discover"
-                  ? "Discover Content"
-                  : "Trending Now"}
+                Welcome back
+                {profile?.name ? `, ${profile.name}` : ""}!
               </h2>
 
-              <p>
-                {activePage === "Recommendations"
-                  ? "Based on the genres in your watchlist."
-                  : activePage === "Watchlist"
-                  ? "Everything you have saved."
-                  : "Explore movies and shows across platforms."}
+              <p className="welcome-subtitle">
+                Find your next favorite movie or show.
               </p>
             </div>
 
-            <span className="results-count">
-              {activePage === "Recommendations"
-                ? recommendedMovies.length
-                : activePage === "Watchlist"
-                ? movies.filter((movie) =>
-                    watchlist.some(
-                      (id) => Number(id) === Number(movie.id)
-                    )
-                  ).length
-                : filteredMovies.length}{" "}
-              titles
-            </span>
-          </div>
-
-          {/* Category filters */}
-          {activePage !== "Watchlist" &&
-            activePage !== "Recommendations" && (
-              <div className="category-list">
-                {categories.map((item) => (
-                  <button
-                    key={item}
-                    className={`category-chip ${
-                      category === item ? "active" : ""
-                    }`}
-                    onClick={() => setCategory(item)}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            )}
-
-          {/* Loading */}
-          {loading && (
-            <div className="loading-state">
-              <div className="loading-spinner" />
-              <p>Loading content...</p>
+            <div className="welcome-badge">
+              <span className="welcome-badge-icon">✦</span>
+              <span>One place. Every platform.</span>
             </div>
+          </section>
+
+          {showLogin && !token && (
+            <section className="backend-notice login-notice">
+              <form onSubmit={handleLogin}>
+                <h3>Sign in to Axlero</h3>
+
+                <label htmlFor="axlero-login-email">
+                  Email
+                </label>
+
+                <input
+                  id="axlero-login-email"
+                  type="email"
+                  value={loginEmail}
+                  onChange={(event) =>
+                    setLoginEmail(event.target.value)
+                  }
+                  placeholder="Enter your email"
+                  autoComplete="email"
+                  required
+                />
+
+                <label htmlFor="axlero-login-password">
+                  Password
+                </label>
+
+                <input
+                  id="axlero-login-password"
+                  type="password"
+                  value={loginPassword}
+                  onChange={(event) =>
+                    setLoginPassword(event.target.value)
+                  }
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  required
+                />
+
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={loading}
+                >
+                  {loading ? "Signing in..." : "Sign in"}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => setShowLogin(false)}
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+              </form>
+            </section>
           )}
 
-          {/* Movie grid */}
-          {!loading && (
-            <div className="movie-grid">
-              {(activePage === "Recommendations"
-                ? recommendedMovies
-                : activePage === "Watchlist"
-                ? movies.filter((movie) =>
-                    watchlist.some(
-                      (id) => Number(id) === Number(movie.id)
-                    )
-                  )
-                : filteredMovies
-              ).map((movie) => {
-                const saved = watchlist.some(
-                  (id) => Number(id) === Number(movie.id)
-                );
-
-                return (
-                  <article
-                    className="movie-card"
-                    key={movie.id}
-                  >
-                    <div
-                      className="movie-poster"
-                      style={{
-                        background:
-                          movie.style?.color ||
-                          "linear-gradient(135deg, #334155, #0f172a)",
-                      }}
-                      onClick={() => setSelectedMovie(movie)}
-                    >
-                      {movie.poster_url ? (
-                        <img
-                          src={movie.poster_url}
-                          alt={movie.title}
-                          className="poster-image"
-                        />
-                      ) : (
-                        <div className="poster-fallback">
-                          <span className="poster-emoji">
-                            {movie.style?.emoji || "🎬"}
-                          </span>
-
-                          <span className="poster-title">
-                            {movie.title}
-                          </span>
-
-                          <span className="poster-year">
-                            {movie.year}
-                          </span>
-                        </div>
-                      )}
-
-                      <span className="poster-type">
-                        {movie.type}
-                      </span>
-
-                      <button
-                        className={`watchlist-button ${
-                          saved ? "saved" : ""
-                        }`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleWatchlist(movie);
-                        }}
-                        disabled={
-                          !token ||
-                          updatingMovieId === Number(movie.id)
-                        }
-                        aria-label={
-                          saved
-                            ? "Remove from watchlist"
-                            : "Add to watchlist"
-                        }
-                      >
-                        {saved ? "♥" : "♡"}
-                      </button>
-
-                      <div className="poster-hover">
-                        <button
-                          className="view-details-button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedMovie(movie);
-                          }}
-                        >
-                          View Details
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="movie-info">
-                      <div className="movie-title-row">
-                        <h3>{movie.title}</h3>
-                        <span className="movie-year">
-                          {movie.year}
-                        </span>
-                      </div>
-
-                      <p className="movie-genre">
-                        {movie.genre || movie.type}
-                      </p>
-
-                      <div className="movie-platform">
-                        <span className="platform-dot" />
-                        <span>{movie.platform}</span>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Empty states */}
-          {!loading &&
-            (activePage === "Recommendations"
-              ? recommendedMovies.length === 0
-              : activePage === "Watchlist"
-              ? !movies.some((movie) =>
-                  watchlist.some(
-                    (id) => Number(id) === Number(movie.id)
-                  )
-                )
-              : filteredMovies.length === 0) && (
-              <div className="empty-state">
-                <div className="empty-state-icon">
-                  {activePage === "Recommendations"
-                    ? "✦"
-                    : activePage === "Watchlist"
-                    ? "♡"
-                    : "⌕"}
-                </div>
-
-                <h3>
-                  {activePage === "Recommendations"
-                    ? "No recommendations yet"
-                    : activePage === "Watchlist"
-                    ? "Your watchlist is empty"
-                    : "No titles found"}
-                </h3>
+          {!backendConnected && (
+            <section className="backend-notice">
+              <div>
+                <strong>
+                  Connect to your Axlero backend
+                </strong>
 
                 <p>
-                  {activePage === "Recommendations"
-                    ? "Add a few titles to your watchlist to get genre-based recommendations."
-                    : activePage === "Watchlist"
-                    ? "Save movies and shows to find them here later."
-                    : "Try changing your search or category filter."}
+                  Sign in and connect to load your personal
+                  watchlist and reviews.
                 </p>
-
-                {activePage !== "Discover" && (
-                  <button
-                    className="secondary-button"
-                    onClick={() => navigateTo("Discover")}
-                  >
-                    Explore Content
-                  </button>
-                )}
               </div>
-            )}
-        </section>
-                {/* Footer */}
-        <footer className="app-footer">
-          <p>
-            © {new Date().getFullYear()} Axlero. All rights reserved.
-          </p>
-          <p>Your entertainment, all in one place.</p>
-        </footer>
+
+              <button
+                onClick={() => setShowLogin(true)}
+                disabled={loading}
+                className="primary-button"
+              >
+                Sign in
+              </button>
+            </section>
+          )}
+
+          {activePage === "profile" ? (
+            <section className="profile-section">
+              <div className="section-heading">
+                <div>
+                  <p className="section-eyebrow">ACCOUNT</p>
+                  <h2>My Profile</h2>
+                </div>
+              </div>
+
+              <div className="profile-card">
+                <div className="profile-avatar">
+                  {profile?.name?.charAt(0)?.toUpperCase() || "U"}
+                </div>
+
+                <div className="profile-details">
+                  <h3>{profile?.name || "Guest User"}</h3>
+
+                  <p>
+                    {profile?.email ||
+                      "Connect to view your account details."}
+                  </p>
+
+                  <span className="profile-status">
+                    {profileLoading
+                      ? "Loading profile..."
+                      : backendConnected
+                      ? "Connected"
+                      : "Not connected"}
+                  </span>
+
+                  {profileError && (
+                    <p className="inline-error">{profileError}</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          ) : (
+            <>
+              {activePage === "home" && heroMovie && (
+                <section className="hero-banner">
+                  <div className="hero-glow" />
+
+                  <div className="hero-copy">
+                    <span className="hero-kicker">
+                      FEATURED DISCOVERY
+                    </span>
+
+                    <h2>{heroMovie.title}</h2>
+
+                    <p>
+                      {heroMovie.description ||
+                        "Discover something unforgettable to watch today."}
+                    </p>
+
+                    <div className="hero-actions">
+                      <button
+                        className="primary-button"
+                        onClick={() =>
+                          setSelectedMovie(heroMovie)
+                        }
+                      >
+                        <span>▶</span> View Details
+                      </button>
+
+                      <button
+                        className="secondary-button"
+                        onClick={() =>
+                          toggleWatchlist(heroMovie)
+                        }
+                      >
+                        <span>＋</span> Add to Watchlist
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="hero-art">
+                    {heroMovie.backdrop_url ||
+                    heroMovie.poster_url ? (
+                      <img
+                        src={
+                          heroMovie.backdrop_url ||
+                          heroMovie.poster_url
+                        }
+                        alt={heroMovie.title}
+                      />
+                    ) : (
+                      <div className="hero-art-fallback">
+                        {getMovieStyle(heroMovie.title).emoji}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {error && (
+                <div className="error-message">
+                  <span>!</span>
+                  <p>{error}</p>
+
+                  <button onClick={() => setError("")}>
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {watchlistError && (
+                <div className="error-message">
+                  <span>!</span>
+                  <p>{watchlistError}</p>
+
+                  <button
+                    onClick={() => setWatchlistError("")}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              <section className="catalog-section">
+                <div className="section-heading">
+                  <div>
+                    <p className="section-eyebrow">
+                      {activePage === "watchlist"
+                        ? "YOUR SAVED TITLES"
+                        : activePage === "browse"
+                        ? "EXPLORE THE COLLECTION"
+                        : "PICK UP SOMETHING NEW"}
+                    </p>
+
+                    <h2>
+                      {activePage === "watchlist"
+                        ? "My Watchlist"
+                        : activePage === "browse"
+                        ? "Browse Catalog"
+                        : "Trending Now"}
+                    </h2>
+                  </div>
+
+                  <span className="result-count">
+                    {activePage === "watchlist"
+                      ? watchlist.length
+                      : filteredMovies.length}{" "}
+                    titles
+                  </span>
+                </div>
+
+                {activePage !== "watchlist" && (
+                  <div className="category-row">
+                    {categories.map((categoryItem) => (
+                      <button
+                        key={categoryItem}
+                        className={`category-chip ${
+                          activeCategory === categoryItem
+                            ? "selected"
+                            : ""
+                        }`}
+                        onClick={() =>
+                          setActiveCategory(categoryItem)
+                        }
+                      >
+                        {categoryItem}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {activePage === "watchlist" &&
+                  watchlistError && (
+                    <p className="inline-error">
+                      {watchlistError}
+                    </p>
+                  )}
+
+                {loading && (
+                  <p className="review-message">
+                    Loading catalog...
+                  </p>
+                )}
+
+                {activePage === "watchlist" &&
+                  watchlistLoading && (
+                    <p className="review-message">
+                      Loading watchlist...
+                    </p>
+                  )}
+
+                <div className="movie-grid">
+                  {(activePage === "watchlist"
+                    ? watchlistMovies
+                    : filteredMovies
+                  ).map((movie) => {
+                    const movieStyle = getMovieStyle(movie.title);
+
+                    const isInWatchlist = watchlist.some(
+                      (item) =>
+                        sameId(getWatchlistId(item), movie.id)
+                    );
+
+                    return (
+                      <article
+                        className="movie-card"
+                        key={movie.id}
+                      >
+                        <button
+                          className="movie-poster"
+                          onClick={() =>
+                            setSelectedMovie(movie)
+                          }
+                        >
+                          {movie.poster_url ? (
+                            <img
+                              src={movie.poster_url}
+                              alt={movie.title}
+                              className="poster-image"
+                            />
+                          ) : (
+                            <div
+                              className="poster-fallback"
+                              style={{
+                                background: movieStyle.color,
+                              }}
+                            >
+                              <span className="poster-emoji">
+                                {movieStyle.emoji}
+                              </span>
+
+                              <span className="poster-title">
+                                {movie.title}
+                              </span>
+                            </div>
+                          )}
+
+                          <span className="poster-type">
+                            {movie.category ||
+                              movie.genre ||
+                              "MOVIE"}
+                          </span>
+                        </button>
+
+                        <button
+                          className={`card-watchlist ${
+                            isInWatchlist ? "saved" : ""
+                          }`}
+                          onClick={() =>
+                            toggleWatchlist(movie)
+                          }
+                          disabled={
+                            updatingMovieId === movie.id
+                          }
+                          title={
+                            isInWatchlist
+                              ? "Remove from watchlist"
+                              : "Add to watchlist"
+                          }
+                        >
+                          {updatingMovieId === movie.id
+                            ? "…"
+                            : isInWatchlist
+                            ? "♥"
+                            : "♡"}
+                        </button>
+
+                        <div className="movie-info">
+                          <div className="movie-title-row">
+                            <h3 className="movie-title">
+                              {movie.title}
+                            </h3>
+
+                            <span className="movie-year">
+                              {movie.release_year ||
+                                movie.year ||
+                                ""}
+                            </span>
+                          </div>
+
+                          <div className="movie-meta">
+                            <span className="movie-platform">
+                              {movie.platform_name ||
+                                movie.platform ||
+                                "Streaming"}
+                            </span>
+
+                            {movie.rating && (
+                              <span className="movie-rating">
+                                ★ {movie.rating}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {(activePage === "watchlist"
+                  ? watchlistMovies.length === 0 &&
+                    !watchlistLoading
+                  : filteredMovies.length === 0 &&
+                    !loading) && (
+                  <div className="empty-state">
+                    <div className="empty-state-icon">✦</div>
+
+                    <h3>
+                      {activePage === "watchlist"
+                        ? "Your watchlist is empty"
+                        : "No titles found"}
+                    </h3>
+
+                    <p>
+                      {activePage === "watchlist"
+                        ? "Save movies and shows here to find them later."
+                        : "Try another search or select a different category."}
+                    </p>
+
+                    {activePage === "watchlist" && (
+                      <button
+                        className="primary-button"
+                        onClick={() => navigateTo("browse")}
+                      >
+                        Explore Catalog
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+          <footer className="footer">
+            <span>
+              © {new Date().getFullYear()} Axlero
+            </span>
+
+            <span>Discover. Save. Stream.</span>
+          </footer>
+        </div>
       </main>
 
-      {/* Movie Details Modal */}
       {selectedMovie && (
         <div
           className="modal-backdrop"
           onClick={() => setSelectedMovie(null)}
         >
           <div
-            className="movie-modal"
+            className="details-modal"
             onClick={(event) => event.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div
-              className="modal-poster"
-              style={{
-                background:
-                  selectedMovie.style?.color ||
-                  "linear-gradient(135deg, #334155, #0f172a)",
-              }}
+            <button
+              className="modal-close"
+              onClick={() => setSelectedMovie(null)}
+              aria-label="Close details"
             >
+              ×
+            </button>
+
+            <div className="modal-art">
               {selectedMovie.poster_url ? (
                 <img
                   src={selectedMovie.poster_url}
                   alt={selectedMovie.title}
-                  className="modal-poster-image"
                 />
               ) : (
-                <div className="modal-poster-fallback">
-                  <span>
-                    {selectedMovie.style?.emoji || "🎬"}
-                  </span>
-                  <h2>{selectedMovie.title}</h2>
+                <div className="modal-art-fallback">
+                  {getMovieStyle(selectedMovie.title).emoji}
                 </div>
               )}
-
-              <button
-                className="modal-close-button"
-                onClick={() => setSelectedMovie(null)}
-                aria-label="Close details"
-              >
-                ×
-              </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="modal-content">
-              <div className="modal-title-row">
-                <div>
-                  <h2>{selectedMovie.title}</h2>
+            <div className="modal-body">
+              <p className="section-eyebrow">
+                MOVIE DETAILS
+              </p>
 
-                  <div className="modal-meta">
-                    <span>{selectedMovie.year}</span>
-                    <span>•</span>
-                    <span>{selectedMovie.type}</span>
-                    <span>•</span>
-                    <span>{selectedMovie.platform}</span>
-                  </div>
-                </div>
+              <h2>{selectedMovie.title}</h2>
 
-                <button
-                  className={`modal-watchlist-button ${
-                    watchlist.some(
-                      (id) =>
-                        Number(id) === Number(selectedMovie.id)
-                    )
-                      ? "saved"
-                      : ""
-                  }`}
-                  onClick={() => toggleWatchlist(selectedMovie)}
-                  disabled={
-                    !token ||
-                    updatingMovieId === Number(selectedMovie.id)
-                  }
-                >
-                  {watchlist.some(
-                    (id) =>
-                      Number(id) === Number(selectedMovie.id)
-                  )
-                    ? "♥ Saved"
-                    : "♡ Add to Watchlist"}
-                </button>
-              </div>
+              <div className="modal-meta">
+                <span>
+                  {selectedMovie.release_year ||
+                    selectedMovie.year ||
+                    "Release year unknown"}
+                </span>
 
-              <div className="modal-genres">
-                {(selectedMovie.genre || selectedMovie.type || "")
-                  .split(",")
-                  .map((genre) => genre.trim())
-                  .filter(Boolean)
-                  .map((genre) => (
-                    <span
-                      className="genre-tag"
-                      key={genre}
-                    >
-                      {genre}
-                    </span>
-                  ))}
+                <span>
+                  {selectedMovie.platform_name ||
+                    selectedMovie.platform ||
+                    "Streaming"}
+                </span>
+
+                <span>
+                  {selectedMovie.category ||
+                    selectedMovie.genre ||
+                    "Movie"}
+                </span>
               </div>
 
               <p className="modal-description">
                 {selectedMovie.description ||
-                  "No description is available for this title."}
+                  "No description is available for this title yet."}
               </p>
 
-              {/* Reviews */}
+              <button
+                className="primary-button"
+                onClick={() =>
+                  toggleWatchlist(selectedMovie)
+                }
+                disabled={
+                  updatingMovieId === selectedMovie.id
+                }
+              >
+                {updatingMovieId === selectedMovie.id
+                  ? "Updating..."
+                  : watchlist.some((item) =>
+                      sameId(
+                        getWatchlistId(item),
+                        selectedMovie.id
+                      )
+                    )
+                  ? "♥ Remove from Watchlist"
+                  : "♡ Add to Watchlist"}
+              </button>
+
               <section className="reviews-section">
-                <div className="reviews-header">
+                <div className="section-heading">
                   <div>
-                    <h3>Reviews & Ratings</h3>
-                    <p>
-                      Share your thoughts about this title.
+                    <p className="section-eyebrow">
+                      COMMUNITY
                     </p>
+
+                    <h3>Reviews</h3>
                   </div>
 
                   {reviewSummary && (
-                    <div className="review-summary">
-                      <span className="review-summary-star">
-                        ★
-                      </span>
-                      <strong>
-                        {Number(
-                          reviewSummary.average_rating ??
-                            reviewSummary.average ??
-                            0
-                        ).toFixed(1)}
-                      </strong>
-                      <span>
-                        ({reviewSummary.total_reviews ??
-                          reviewSummary.count ??
-                          reviews.length}
-                        )
-                      </span>
-                    </div>
+                    <span className="result-count">
+                      {reviewSummary.average_rating != null
+                        ? `★ ${reviewSummary.average_rating}`
+                        : "No rating yet"}
+                    </span>
                   )}
                 </div>
 
-                {/* Review Error */}
-                {reviewsError && (
-                  <div className="error-message">
-                    <p>{reviewsError}</p>
-                  </div>
-                )}
-
-                {/* Review Form */}
-                {token ? (
-                  <form
-                    className="review-form"
-                    onSubmit={submitReview}
-                  >
-                    <label htmlFor="review-rating">
-                      Your rating
-                    </label>
-
-                    <select
-                      id="review-rating"
-                      value={reviewRating}
-                      onChange={(event) =>
-                        setReviewRating(Number(event.target.value))
-                      }
-                    >
-                      {[5, 4, 3, 2, 1].map((rating) => (
-                        <option
-                          key={rating}
-                          value={rating}
-                        >
-                          {rating} {rating === 1 ? "Star" : "Stars"}
-                        </option>
-                      ))}
-                    </select>
-
-                    <label htmlFor="review-text">
-                      Your review
-                    </label>
-
-                    <textarea
-                      id="review-text"
-                      rows={3}
-                      placeholder="What did you think about this title?"
-                      value={reviewText}
-                      onChange={(event) =>
-                        setReviewText(event.target.value)
-                      }
-                      required
-                    />
-
-                    <div className="review-form-actions">
-                      <button
-                        type="submit"
-                        className="primary-button"
-                        disabled={
-                          reviewSubmitting ||
-                          !reviewText.trim()
-                        }
-                      >
-                        {reviewSubmitting
-                          ? "Submitting..."
-                          : editingReviewId
-                          ? "Update Review"
-                          : "Submit Review"}
-                      </button>
-
-                      {editingReviewId && (
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => {
-                            setEditingReviewId(null);
-                            setReviewText("");
-                            setReviewRating(5);
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </form>
+                {reviewsLoading ? (
+                  <p className="review-message">
+                    Loading reviews...
+                  </p>
+                ) : reviewsError ? (
+                  <p className="inline-error">
+                    {reviewsError}
+                  </p>
+                ) : reviews.length === 0 ? (
+                  <p className="review-message">
+                    No reviews yet. Be the first to share
+                    your thoughts.
+                  </p>
                 ) : (
-                  <div className="review-login-notice">
-                    Connect your backend account to submit a review.
-                  </div>
-                )}
-
-                {/* Review List */}
-                <div className="review-list">
-                  {reviewsLoading ? (
-                    <div className="reviews-loading">
-                      Loading reviews...
-                    </div>
-                  ) : reviews.length === 0 ? (
-                    <div className="reviews-empty">
-                      <span>✍</span>
-                      <p>
-                        No reviews yet. Be the first to review this title.
-                      </p>
-                    </div>
-                  ) : (
-                    reviews.map((review) => {
+                  <div className="review-list">
+                    {reviews.map((review) => {
                       const isOwnReview =
-                        review.id === myReviewId ||
-                        review.is_own_review ||
-                        review.is_current_user ||
-                        review.own_review;
+                        sameId(
+                          review.user_id,
+                          profile?.id
+                        ) ||
+                        sameId(review.id, myReviewId);
 
                       return (
                         <article
                           className="review-card"
                           key={review.id}
                         >
-                          <div className="review-card-header">
-                            <div>
-                              <strong>
-                                {review.username ||
-                                  review.user_name ||
-                                  review.user?.username ||
-                                  "User"}
-                              </strong>
+                          <div className="review-card-heading">
+                            <strong>
+                              {review.user_name ||
+                                review.username ||
+                                "User"}
+                            </strong>
 
-                              <div className="review-stars">
-                                {"★".repeat(
-                                  Math.max(
-                                    0,
-                                    Math.min(
-                                      5,
-                                      Number(review.rating) || 0
-                                    )
-                                  )
-                                )}
-                                {"☆".repeat(
-                                  5 -
-                                    Math.max(
-                                      0,
-                                      Math.min(
-                                        5,
-                                        Number(review.rating) || 0
-                                      )
-                                    )
-                                )}
-                              </div>
-                            </div>
-
-                            {isOwnReview && token && (
-                              <div className="review-actions">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    beginEditReview(review)
-                                  }
-                                >
-                                  Edit
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    removeReview(review.id)
-                                  }
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            )}
+                            <span>
+                              {"★".repeat(
+                                Number(review.rating) || 0
+                              )}
+                            </span>
                           </div>
 
-                          <p className="review-comment">
-                            {review.comment ||
-                              review.text ||
-                              "No written comment."}
+                          <p>
+                            {review.review_text ||
+                              review.comment ||
+                              ""}
                           </p>
 
-                          {review.created_at && (
-                            <span className="review-date">
-                              {new Date(
-                                review.created_at
-                              ).toLocaleDateString()}
-                            </span>
+                          {isOwnReview && (
+                            <div className="review-actions">
+                              <button
+                                onClick={() =>
+                                  beginEditReview(review)
+                                }
+                              >
+                                Edit
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  removeReview(review.id)
+                                }
+                              >
+                                Delete
+                              </button>
+                            </div>
                           )}
                         </article>
                       );
-                    })
-                  )}
-                </div>
+                    })}
+                  </div>
+                )}
+
+                {!token && (
+                  <p className="review-message">
+                    Please sign in to write or manage reviews.
+                  </p>
+                )}
+
+                <form
+                  className="review-form"
+                  onSubmit={submitReview}
+                >
+                  <h4>
+                    {editingReviewId
+                      ? "Edit your review"
+                      : "Write a review"}
+                  </h4>
+
+                  <label htmlFor="review-rating">
+                    Rating
+                  </label>
+
+                  <select
+                    id="review-rating"
+                    value={reviewRating}
+                    onChange={(event) =>
+                      setReviewRating(
+                        Number(event.target.value)
+                      )
+                    }
+                    disabled={!token || reviewSubmitting}
+                  >
+                    {[5, 4, 3, 2, 1].map((rating) => (
+                      <option
+                        key={rating}
+                        value={rating}
+                      >
+                        {rating}{" "}
+                        {rating === 1 ? "star" : "stars"}
+                      </option>
+                    ))}
+                  </select>
+
+                  <label htmlFor="review-text">
+                    Your review
+                  </label>
+
+                  <textarea
+                    id="review-text"
+                    value={reviewText}
+                    onChange={(event) =>
+                      setReviewText(event.target.value)
+                    }
+                    placeholder="What did you think about this title?"
+                    rows={3}
+                    disabled={!token || reviewSubmitting}
+                  />
+
+                  <div className="review-form-actions">
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={!token || reviewSubmitting}
+                    >
+                      {reviewSubmitting
+                        ? "Submitting..."
+                        : editingReviewId
+                        ? "Update Review"
+                        : "Submit Review"}
+                    </button>
+
+                    {editingReviewId && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setEditingReviewId(null);
+                          setReviewText("");
+                          setReviewRating(5);
+                        }}
+                        disabled={reviewSubmitting}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                </form>
               </section>
             </div>
           </div>
         </div>
-        
       )}
     </div>
   );

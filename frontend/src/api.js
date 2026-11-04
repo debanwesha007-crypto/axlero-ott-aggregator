@@ -1,11 +1,10 @@
-
 const API_BASE_URL = "http://127.0.0.1:8000";
 
 async function apiRequest(path, token, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "Content-Type": "application/json",
       ...options.headers,
     },
@@ -31,12 +30,53 @@ async function apiRequest(path, token, options = {}) {
   return response.json();
 }
 
+// --------------------
+// Authentication
+// --------------------
+
+export function getMe(token) {
+  return apiRequest("/api/auth/me", token);
+}
+
+export async function loginUser(email, password) {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  });
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error("Unable to read the login response.");
+  }
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Login failed");
+  }
+
+  return data;
+}
+
+// --------------------
 // Content
+// --------------------
+
 export function getContent(token) {
   return apiRequest("/api/content/", token);
 }
 
+// --------------------
 // Watchlist
+// --------------------
+
 export function getWatchlist(token) {
   return apiRequest("/api/watchlist/", token);
 }
@@ -44,7 +84,9 @@ export function getWatchlist(token) {
 export function addToWatchlist(token, contentId) {
   return apiRequest("/api/watchlist/", token, {
     method: "POST",
-    body: JSON.stringify({ content_id: contentId }),
+    body: JSON.stringify({
+      content_id: contentId,
+    }),
   });
 }
 
@@ -54,7 +96,10 @@ export function removeFromWatchlist(token, contentId) {
   });
 }
 
+// --------------------
 // Reviews
+// --------------------
+
 export function getReviews(token, contentId) {
   return apiRequest(`/api/reviews/content/${contentId}`, token);
 }
