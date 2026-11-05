@@ -12,6 +12,7 @@ import {
   deleteReview,
   getMe,
   loginUser,
+  registerUser,
 } from "./api";
 
 import "./App.css";
@@ -118,6 +119,13 @@ function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
+  const [showSignup, setShowSignup] = useState(false);
+const [signupName, setSignupName] = useState("");
+const [signupEmail, setSignupEmail] = useState("");
+const [signupPassword, setSignupPassword] = useState("");
+const [signupError, setSignupError] = useState("");
+const [signupSuccess, setSignupSuccess] = useState("");
+const [signupLoading, setSignupLoading] = useState(false);
 
   // User profile
   const [profile, setProfile] = useState(null);
@@ -599,6 +607,49 @@ function App() {
   }, [movies]);
 
   // --------------------------------------------------
+  // Signup
+  // --------------------------------------------------
+
+  const handleSignup = async (event) => {
+    event.preventDefault();
+    setSignupError("");
+    setSignupSuccess("");
+
+    const name = signupName.trim();
+    const email = signupEmail.trim().toLowerCase();
+
+    if (name.length < 2) {
+      setSignupError("Name must contain at least 2 characters.");
+      return;
+    }
+
+    if (signupPassword.length < 8) {
+      setSignupError("Password must contain at least 8 characters.");
+      return;
+    }
+
+    try {
+      setSignupLoading(true);
+      await registerUser(name, email, signupPassword);
+
+      setSignupSuccess("Account created successfully. Please sign in.");
+      setLoginEmail(email);
+      setLoginPassword("");
+      setSignupName("");
+      setSignupEmail("");
+      setSignupPassword("");
+      setShowSignup(false);
+      setShowLogin(true);
+    } catch (err) {
+      setSignupError(
+        getErrorMessage(err, "Registration failed. Please try again.")
+      );
+    } finally {
+      setSignupLoading(false);
+    }
+  };
+
+  // --------------------------------------------------
   // Login
   // --------------------------------------------------
 
@@ -690,6 +741,32 @@ function App() {
     setReviewSummary(null);
     setMyReviewId(null);
     setShowLogin(false);
+  };
+    // --------------------------------------------------
+  // Logout
+  // --------------------------------------------------
+
+  const handleLogout = () => {
+    localStorage.removeItem("axlero_token");
+
+    setToken("");
+    setProfile(null);
+    setBackendConnected(false);
+
+    setWatchlist([]);
+    setReviews([]);
+    setReviewSummary(null);
+    setMyReviewId(null);
+
+    setLoginEmail("");
+    setLoginPassword("");
+
+    setShowSignup(false);
+    setShowLogin(true);
+
+    setActivePage("home");
+    setError("");
+    setProfileError("");
   };
 
   // --------------------------------------------------
@@ -882,7 +959,7 @@ function App() {
           ) : (
             <button
               className="sidebar-action"
-              onClick={() => setShowLogin(true)}
+              onClick={() => { setShowSignup(false); setShowLogin(true); }}
               disabled={loading}
             >
               Sign in
@@ -955,6 +1032,12 @@ function App() {
               <form onSubmit={handleLogin}>
                 <h3>Sign in to Axlero</h3>
 
+                {signupSuccess && (
+                  <p className="signup-success" role="status">
+                    {signupSuccess}
+                  </p>
+                )}
+
                 <label htmlFor="axlero-login-email">
                   Email
                 </label>
@@ -998,10 +1081,95 @@ function App() {
                 <button
                   type="button"
                   className="secondary-button"
+                  onClick={() => {
+                    setShowLogin(false);
+                    setShowSignup(true);
+                    setSignupError("");
+                  }}
+                  disabled={loading}
+                >
+                  Create account
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
                   onClick={() => setShowLogin(false)}
                   disabled={loading}
                 >
                   Cancel
+                </button>
+              </form>
+            </section>
+          )}
+
+          {showSignup && !token && (
+            <section className="backend-notice login-notice signup-notice">
+              <form onSubmit={handleSignup}>
+                <h3>Create your Axlero account</h3>
+
+                {signupError && (
+                  <p className="inline-error" role="alert">
+                    {signupError}
+                  </p>
+                )}
+
+                <label htmlFor="axlero-signup-name">Full name</label>
+                <input
+                  id="axlero-signup-name"
+                  type="text"
+                  value={signupName}
+                  onChange={(event) => setSignupName(event.target.value)}
+                  placeholder="Enter your name"
+                  autoComplete="name"
+                  minLength={2}
+                  maxLength={100}
+                  required
+                />
+
+                <label htmlFor="axlero-signup-email">Email</label>
+                <input
+                  id="axlero-signup-email"
+                  type="email"
+                  value={signupEmail}
+                  onChange={(event) => setSignupEmail(event.target.value)}
+                  placeholder="Enter your email"
+                  autoComplete="email"
+                  required
+                />
+
+                <label htmlFor="axlero-signup-password">Password</label>
+                <input
+                  id="axlero-signup-password"
+                  type="password"
+                  value={signupPassword}
+                  onChange={(event) => setSignupPassword(event.target.value)}
+                  placeholder="At least 8 characters"
+                  autoComplete="new-password"
+                  minLength={8}
+                  maxLength={72}
+                  required
+                />
+
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={signupLoading}
+                >
+                  {signupLoading ? "Creating account..." : "Sign up"}
+                </button>
+
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setShowSignup(false);
+                    setShowLogin(true);
+                    setSignupError("");
+                  }}
+                  disabled={signupLoading}
+                >
+                  Back to sign in
                 </button>
               </form>
             </section>
@@ -1065,6 +1233,13 @@ function App() {
                   )}
                 </div>
               </div>
+                            <button
+                type="button"
+                className="primary-button"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
             </section>
           ) : (
             <>
