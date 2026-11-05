@@ -237,11 +237,10 @@ const [signupLoading, setSignupLoading] = useState(false);
   useEffect(() => {
     let cancelled = false;
 
-    const loadContent = async () => {
+     const loadContent = async () => {
       if (!token) {
         setMovies([]);
         setLoading(false);
-        setError("");
         return;
       }
 
@@ -1787,22 +1786,126 @@ const [signupLoading, setSignupLoading] = useState(false);
                         : "Submit Review"}
                     </button>
 
-                    {editingReviewId && (
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => {
-                          setEditingReviewId(null);
-                          setReviewText("");
-                          setReviewRating(5);
-                        }}
-                        disabled={reviewSubmitting}
-                      >
-                        Cancel
-                      </button>
-                    )}
+                      {editingReviewId && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => {
+                            setEditingReviewId(null);
+                            setReviewText("");
+                            setReviewRating(5);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </form>
+                ) : (
+                  <div className="review-login-notice">
+                    Connect your backend account to submit a review.
                   </div>
-                </form>
+                )}
+
+                {/* Review List */}
+                <div className="review-list">
+                  {reviewsLoading ? (
+                    <div className="reviews-loading">
+                      Loading reviews...
+                    </div>
+                  ) : reviews.length === 0 ? (
+                    <div className="reviews-empty">
+                      <span>✍</span>
+                      <p>
+                        No reviews yet. Be the first to review this title.
+                      </p>
+                    </div>
+                  ) : (
+                    reviews.map((review) => {
+                      const isOwnReview =
+                        review.id === myReviewId ||
+                        review.is_own_review ||
+                        review.is_current_user ||
+                        review.own_review;
+
+                      return (
+                        <article
+                          className="review-card"
+                          key={review.id}
+                        >
+                          <div className="review-card-header">
+                            <div>
+                              <strong>
+                                {review.username ||
+                                  review.user_name ||
+                                  review.user?.username ||
+                                  "User"}
+                              </strong>
+
+                              <div className="review-stars">
+                                {"★".repeat(
+                                  Math.max(
+                                    0,
+                                    Math.min(
+                                      5,
+                                      Number(review.rating) || 0
+                                    )
+                                  )
+                                )}
+                                {"☆".repeat(
+                                  5 -
+                                    Math.max(
+                                      0,
+                                      Math.min(
+                                        5,
+                                        Number(review.rating) || 0
+                                      )
+                                    )
+                                )}
+                              </div>
+                            </div>
+
+                            {isOwnReview && token && (
+                              <div className="review-actions">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    beginEditReview(review)
+                                  }
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeReview(review.id)
+                                  }
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          <p className="review-comment">
+                            {review.comment ||
+                              review.text ||
+                              "No written comment."}
+                          </p>
+
+                          {review.created_at && (
+                            <span className="review-date">
+                              {new Date(
+                                review.created_at
+                              ).toLocaleDateString()}
+                            </span>
+                          )}
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
               </section>
             </div>
           </div>

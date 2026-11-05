@@ -65,7 +65,6 @@ def serialize_content(content: Content) -> dict:
 def create_content(
     content_data: dict,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
 ):
     """Create content and invalidate cached content-list responses."""
     platform_id = content_data.get("platform_id")
@@ -139,7 +138,6 @@ def list_content(
         pattern="^(asc|desc)$",
     ),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
 ):
     """Search, filter, sort, paginate, and cache content."""
     if content_type is not None and content_type not in {
