@@ -120,12 +120,12 @@ function App() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showSignup, setShowSignup] = useState(false);
-const [signupName, setSignupName] = useState("");
-const [signupEmail, setSignupEmail] = useState("");
-const [signupPassword, setSignupPassword] = useState("");
-const [signupError, setSignupError] = useState("");
-const [signupSuccess, setSignupSuccess] = useState("");
-const [signupLoading, setSignupLoading] = useState(false);
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupError, setSignupError] = useState("");
+  const [signupSuccess, setSignupSuccess] = useState("");
+  const [signupLoading, setSignupLoading] = useState(false);
 
   // User profile
   const [profile, setProfile] = useState(null);
@@ -237,12 +237,7 @@ const [signupLoading, setSignupLoading] = useState(false);
   useEffect(() => {
     let cancelled = false;
 
-     const loadContent = async () => {
-      if (!token) {
-        setMovies([]);
-        setLoading(false);
-        return;
-      }
+    const loadContent = async () => {
 
       try {
         setLoading(true);
@@ -741,7 +736,8 @@ const [signupLoading, setSignupLoading] = useState(false);
     setMyReviewId(null);
     setShowLogin(false);
   };
-    // --------------------------------------------------
+
+  // --------------------------------------------------
   // Logout
   // --------------------------------------------------
 
@@ -958,7 +954,10 @@ const [signupLoading, setSignupLoading] = useState(false);
           ) : (
             <button
               className="sidebar-action"
-              onClick={() => { setShowSignup(false); setShowLogin(true); }}
+              onClick={() => {
+                setShowSignup(false);
+                setShowLogin(true);
+              }}
               disabled={loading}
             >
               Sign in
@@ -1113,12 +1112,17 @@ const [signupLoading, setSignupLoading] = useState(false);
                   </p>
                 )}
 
-                <label htmlFor="axlero-signup-name">Full name</label>
+                <label htmlFor="axlero-signup-name">
+                  Full name
+                </label>
+
                 <input
                   id="axlero-signup-name"
                   type="text"
                   value={signupName}
-                  onChange={(event) => setSignupName(event.target.value)}
+                  onChange={(event) =>
+                    setSignupName(event.target.value)
+                  }
                   placeholder="Enter your name"
                   autoComplete="name"
                   minLength={2}
@@ -1126,23 +1130,33 @@ const [signupLoading, setSignupLoading] = useState(false);
                   required
                 />
 
-                <label htmlFor="axlero-signup-email">Email</label>
+                <label htmlFor="axlero-signup-email">
+                  Email
+                </label>
+
                 <input
                   id="axlero-signup-email"
                   type="email"
                   value={signupEmail}
-                  onChange={(event) => setSignupEmail(event.target.value)}
+                  onChange={(event) =>
+                    setSignupEmail(event.target.value)
+                  }
                   placeholder="Enter your email"
                   autoComplete="email"
                   required
                 />
 
-                <label htmlFor="axlero-signup-password">Password</label>
+                <label htmlFor="axlero-signup-password">
+                  Password
+                </label>
+
                 <input
                   id="axlero-signup-password"
                   type="password"
                   value={signupPassword}
-                  onChange={(event) => setSignupPassword(event.target.value)}
+                  onChange={(event) =>
+                    setSignupPassword(event.target.value)
+                  }
                   placeholder="At least 8 characters"
                   autoComplete="new-password"
                   minLength={8}
@@ -1232,7 +1246,8 @@ const [signupLoading, setSignupLoading] = useState(false);
                   )}
                 </div>
               </div>
-                            <button
+
+              <button
                 type="button"
                 className="primary-button"
                 onClick={handleLogout}
@@ -1786,26 +1801,21 @@ const [signupLoading, setSignupLoading] = useState(false);
                         : "Submit Review"}
                     </button>
 
-                      {editingReviewId && (
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => {
-                            setEditingReviewId(null);
-                            setReviewText("");
-                            setReviewRating(5);
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </form>
-                ) : (
-                  <div className="review-login-notice">
-                    Connect your backend account to submit a review.
+                    {editingReviewId && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => {
+                          setEditingReviewId(null);
+                          setReviewText("");
+                          setReviewRating(5);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </div>
-                )}
+                </form>
 
                 {/* Review List */}
                 <div className="review-list">

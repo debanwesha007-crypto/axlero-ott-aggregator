@@ -1,4 +1,3 @@
-
 const API_BASE_URL = "http://127.0.0.1:8000";
 
 async function apiRequest(path, token, options = {}) {
@@ -34,6 +33,32 @@ async function apiRequest(path, token, options = {}) {
   }
 
   return response.json();
+}
+
+// Authentication
+export function loginUser(email, password) {
+  return apiRequest("/api/auth/login", null, {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      password,
+    }),
+  });
+}
+
+export function registerUser(name, email, password) {
+  return apiRequest("/api/auth/register", null, {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      email,
+      password,
+    }),
+  });
+}
+
+export function getMe(token) {
+  return apiRequest("/api/auth/me", token);
 }
 
 // Content
