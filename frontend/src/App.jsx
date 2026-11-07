@@ -120,12 +120,12 @@ function App() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showSignup, setShowSignup] = useState(false);
-  const [signupName, setSignupName] = useState("");
-  const [signupEmail, setSignupEmail] = useState("");
-  const [signupPassword, setSignupPassword] = useState("");
-  const [signupError, setSignupError] = useState("");
-  const [signupSuccess, setSignupSuccess] = useState("");
-  const [signupLoading, setSignupLoading] = useState(false);
+const [signupName, setSignupName] = useState("");
+const [signupEmail, setSignupEmail] = useState("");
+const [signupPassword, setSignupPassword] = useState("");
+const [signupError, setSignupError] = useState("");
+const [signupSuccess, setSignupSuccess] = useState("");
+const [signupLoading, setSignupLoading] = useState(false);
 
   // User profile
   const [profile, setProfile] = useState(null);
@@ -238,6 +238,12 @@ function App() {
     let cancelled = false;
 
     const loadContent = async () => {
+      if (!token) {
+        setMovies([]);
+        setLoading(false);
+        setError("");
+        return;
+      }
 
       try {
         setLoading(true);
@@ -738,33 +744,6 @@ function App() {
   };
 
   // --------------------------------------------------
-  // Logout
-  // --------------------------------------------------
-
-  const handleLogout = () => {
-    localStorage.removeItem("axlero_token");
-
-    setToken("");
-    setProfile(null);
-    setBackendConnected(false);
-
-    setWatchlist([]);
-    setReviews([]);
-    setReviewSummary(null);
-    setMyReviewId(null);
-
-    setLoginEmail("");
-    setLoginPassword("");
-
-    setShowSignup(false);
-    setShowLogin(true);
-
-    setActivePage("home");
-    setError("");
-    setProfileError("");
-  };
-
-  // --------------------------------------------------
   // Watchlist toggle
   // --------------------------------------------------
 
@@ -944,26 +923,25 @@ function App() {
             </span>
           </div>
 
-          {backendConnected ? (
-            <button
-              className="sidebar-action"
-              onClick={disconnectBackend}
-            >
-              Disconnect
-            </button>
-          ) : (
-            <button
-              className="sidebar-action"
-              onClick={() => {
-                setShowSignup(false);
-                setShowLogin(true);
-              }}
-              disabled={loading}
-            >
-              Sign in
-            </button>
-          )}
-        </div>
+         {backendConnected ? (
+  <button
+    className="sidebar-action"
+    onClick={disconnectBackend}
+  >
+    Logout
+  </button>
+) : (
+  <button
+    className="sidebar-action"
+    onClick={() => {
+      setShowSignup(false);
+      setShowLogin(true);
+    }}
+    disabled={loading}
+  >
+    Sign in
+  </button>
+)}</div>
       </aside>
 
       <main className="main-content">
@@ -1112,17 +1090,12 @@ function App() {
                   </p>
                 )}
 
-                <label htmlFor="axlero-signup-name">
-                  Full name
-                </label>
-
+                <label htmlFor="axlero-signup-name">Full name</label>
                 <input
                   id="axlero-signup-name"
                   type="text"
                   value={signupName}
-                  onChange={(event) =>
-                    setSignupName(event.target.value)
-                  }
+                  onChange={(event) => setSignupName(event.target.value)}
                   placeholder="Enter your name"
                   autoComplete="name"
                   minLength={2}
@@ -1130,33 +1103,23 @@ function App() {
                   required
                 />
 
-                <label htmlFor="axlero-signup-email">
-                  Email
-                </label>
-
+                <label htmlFor="axlero-signup-email">Email</label>
                 <input
                   id="axlero-signup-email"
                   type="email"
                   value={signupEmail}
-                  onChange={(event) =>
-                    setSignupEmail(event.target.value)
-                  }
+                  onChange={(event) => setSignupEmail(event.target.value)}
                   placeholder="Enter your email"
                   autoComplete="email"
                   required
                 />
 
-                <label htmlFor="axlero-signup-password">
-                  Password
-                </label>
-
+                <label htmlFor="axlero-signup-password">Password</label>
                 <input
                   id="axlero-signup-password"
                   type="password"
                   value={signupPassword}
-                  onChange={(event) =>
-                    setSignupPassword(event.target.value)
-                  }
+                  onChange={(event) => setSignupPassword(event.target.value)}
                   placeholder="At least 8 characters"
                   autoComplete="new-password"
                   minLength={8}
@@ -1246,14 +1209,6 @@ function App() {
                   )}
                 </div>
               </div>
-
-              <button
-                type="button"
-                className="primary-button"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
             </section>
           ) : (
             <>
@@ -1810,112 +1765,13 @@ function App() {
                           setReviewText("");
                           setReviewRating(5);
                         }}
+                        disabled={reviewSubmitting}
                       >
                         Cancel
                       </button>
                     )}
                   </div>
                 </form>
-
-                {/* Review List */}
-                <div className="review-list">
-                  {reviewsLoading ? (
-                    <div className="reviews-loading">
-                      Loading reviews...
-                    </div>
-                  ) : reviews.length === 0 ? (
-                    <div className="reviews-empty">
-                      <span>✍</span>
-                      <p>
-                        No reviews yet. Be the first to review this title.
-                      </p>
-                    </div>
-                  ) : (
-                    reviews.map((review) => {
-                      const isOwnReview =
-                        review.id === myReviewId ||
-                        review.is_own_review ||
-                        review.is_current_user ||
-                        review.own_review;
-
-                      return (
-                        <article
-                          className="review-card"
-                          key={review.id}
-                        >
-                          <div className="review-card-header">
-                            <div>
-                              <strong>
-                                {review.username ||
-                                  review.user_name ||
-                                  review.user?.username ||
-                                  "User"}
-                              </strong>
-
-                              <div className="review-stars">
-                                {"★".repeat(
-                                  Math.max(
-                                    0,
-                                    Math.min(
-                                      5,
-                                      Number(review.rating) || 0
-                                    )
-                                  )
-                                )}
-                                {"☆".repeat(
-                                  5 -
-                                    Math.max(
-                                      0,
-                                      Math.min(
-                                        5,
-                                        Number(review.rating) || 0
-                                      )
-                                    )
-                                )}
-                              </div>
-                            </div>
-
-                            {isOwnReview && token && (
-                              <div className="review-actions">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    beginEditReview(review)
-                                  }
-                                >
-                                  Edit
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    removeReview(review.id)
-                                  }
-                                >
-                                  Delete
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          <p className="review-comment">
-                            {review.comment ||
-                              review.text ||
-                              "No written comment."}
-                          </p>
-
-                          {review.created_at && (
-                            <span className="review-date">
-                              {new Date(
-                                review.created_at
-                              ).toLocaleDateString()}
-                            </span>
-                          )}
-                        </article>
-                      );
-                    })
-                  )}
-                </div>
               </section>
             </div>
           </div>
