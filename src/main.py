@@ -16,6 +16,7 @@ from src.models.review import Review
 from src.models.user import User
 from src.models.watchlist import Watchlist
 from fastapi.middleware.cors import CORSMiddleware
+from src.api.watchmode import router as watchmode_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -46,6 +47,7 @@ app.include_router(platforms_router)
 app.include_router(watchlist_router)
 app.include_router(recommendations_router)
 app.include_router(reviews_router)
+app.include_router(watchmode_router)
 
 
 @app.get("/")

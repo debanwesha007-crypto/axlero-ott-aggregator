@@ -13,6 +13,8 @@ import {
   getMe,
   loginUser,
   registerUser,
+  searchWatchmodeTitles,
+getWatchmodeSources,
 } from "./api";
 
 import "./App.css";
@@ -144,6 +146,10 @@ const [signupLoading, setSignupLoading] = useState(false);
 
   // Selected movie
   const [selectedMovie, setSelectedMovie] = useState(null);
+  // Watchmode streaming availability
+const [streamingSources, setStreamingSources] = useState([]);
+const [streamingLoading, setStreamingLoading] = useState(false);
+const [streamingError, setStreamingError] = useState("");
 
   // Reviews
   const [reviews, setReviews] = useState([]);
@@ -155,6 +161,99 @@ const [signupLoading, setSignupLoading] = useState(false);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [editingReviewId, setEditingReviewId] = useState(null);
   const [myReviewId, setMyReviewId] = useState(null);
+
+  // --------------------------------------------------
+// Load Watchmode streaming sources
+// --------------------------------------------------
+
+useEffect(() => {
+  let cancelled = false;
+
+  const loadStreamingSources = async () => {
+    if (!selectedMovie) {
+      setStreamingSources([]);
+      setStreamingError("");
+      setStreamingLoading(false);
+      return;
+    }
+
+    try {
+      setStreamingLoading(true);
+      setStreamingError("");
+      setStreamingSources([]);
+
+      const searchResponse = await searchWatchmodeTitles(
+        selectedMovie.title,
+        10
+      );
+
+      const results = getResponseItems(searchResponse, [
+        "title_results",
+        "results",
+        "items",
+      ]);
+
+      const normalizeTitle = (value) =>
+        String(value || "").trim().toLowerCase();
+
+      const exactMatches = results.filter(
+        (item) =>
+          normalizeTitle(item.name || item.title) ===
+          normalizeTitle(selectedMovie.title)
+      );
+
+      const movieYear = Number(
+        selectedMovie.release_year || selectedMovie.year
+      );
+
+      const matchedTitle =
+        exactMatches.find(
+          (item) =>
+            movieYear &&
+            Number(item.year) === movieYear
+        ) || exactMatches[0];
+
+      if (!matchedTitle?.id) {
+        throw new Error(
+          "Streaming information not found for this title."
+        );
+      }
+
+      const sourcesResponse = await getWatchmodeSources(
+        matchedTitle.id
+      );
+
+      const sources = getResponseItems(sourcesResponse, [
+        "sources",
+        "items",
+      ]);
+
+      const indiaSources = sources.filter(
+        (source) => source.region === "IN"
+      );
+
+      if (!cancelled) {
+        setStreamingSources(indiaSources);
+      }
+    } catch (err) {
+      if (!cancelled) {
+        setStreamingError(
+          getErrorMessage(err, "Unable to load streaming options.")
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setStreamingLoading(false);
+      }
+    }
+  };
+
+  loadStreamingSources();
+
+  return () => {
+    cancelled = true;
+  };
+}, [selectedMovie]);
 
   // --------------------------------------------------
   // Keyboard shortcut: Ctrl/Cmd + K
@@ -1594,6 +1693,85 @@ const [signupLoading, setSignupLoading] = useState(false);
                   ? "♥ Remove from Watchlist"
                   : "♡ Add to Watchlist"}
               </button>
+
+              {/* Watchmode Streaming Availability */}
+              <section className="streaming-section">
+                <div className="section-heading">
+                  <div>
+                    <p className="section-eyebrow">
+                      WHERE TO WATCH
+                    </p>
+                    <h3>Available in India</h3>
+                  </div>
+                </div>
+
+                {streamingLoading && (
+                  <p className="streaming-message">
+                    Checking streaming availability...
+                  </p>
+                )}
+
+                {!streamingLoading && streamingError && (
+                  <p className="streaming-message">
+                    {streamingError}
+                  </p>
+                )}
+
+                {!streamingLoading &&
+                  !streamingError &&
+                  streamingSources.length === 0 && (
+                    <p className="streaming-message">
+                      No streaming options currently available in India.
+                    </p>
+                  )}
+
+                {!streamingLoading &&
+                  streamingSources.length > 0 && (
+                    <div className="streaming-list">
+                      {streamingSources.map((source, index) => (
+                        <div
+                          className="streaming-card"
+                          key={`${source.source_id}-${source.type}-${index}`}
+                        >
+                          <div className="streaming-provider">
+                            <strong>{source.name}</strong>
+                            <span>
+                              {source.type === "sub"
+                                ? "Subscription"
+                                : source.type === "rent"
+                                ? "Rent"
+                                : source.type === "buy"
+                                ? "Buy"
+                                : source.type}
+                            </span>
+                          </div>
+
+                          <div className="streaming-details">
+                            {source.format && (
+                              <span>{source.format}</span>
+                            )}
+
+                            {source.price != null && (
+                              <span>₹{source.price}</span>
+                            )}
+                          </div>
+
+                          {source.web_url && (
+                            <a
+                              href={source.web_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="streaming-link"
+                            >
+                              View on platform ↗
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+              </section>
+
 
               <section className="reviews-section">
                 <div className="section-heading">

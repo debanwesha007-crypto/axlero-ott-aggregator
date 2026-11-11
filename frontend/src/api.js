@@ -168,3 +168,19 @@ export function deleteReview(token, reviewId) {
     method: "DELETE",
   });
 }
+// --------------------
+// Watchmode
+// --------------------
+
+export function searchWatchmodeTitles(query, limit = 10) {
+  const params = new URLSearchParams({
+    query,
+    limit: String(limit),
+  });
+
+  return apiRequest(`/api/watchmode/search?${params.toString()}`);
+}
+
+export function getWatchmodeSources(titleId) {
+  return apiRequest(`/api/watchmode/title/${titleId}/sources`);
+}

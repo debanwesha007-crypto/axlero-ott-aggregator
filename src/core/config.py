@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     redis_username: str = "default"
     redis_password: str = ""
     redis_ssl: bool = False
+    watchmode_api_key: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

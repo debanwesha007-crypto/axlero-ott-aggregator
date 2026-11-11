@@ -1632,3 +1632,65 @@ select:focus-visible {
     display: none;
   }
 }
+/* Watchmode Streaming Availability */
+
+.streaming-section {
+  margin-top: 28px;
+  margin-bottom: 30px;
+}
+
+.streaming-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.streaming-card {
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.streaming-provider {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.streaming-provider strong {
+  font-size: 15px;
+}
+
+.streaming-provider span,
+.streaming-details span {
+  font-size: 12px;
+  color: #a1a1aa;
+}
+
+.streaming-details {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.streaming-link {
+  display: inline-block;
+  color: #a78bfa;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.streaming-link:hover {
+  text-decoration: underline;
+}
+
+.streaming-message {
+  margin-top: 14px;
+  color: #a1a1aa;
+  font-size: 14px;
+}
