@@ -1,9 +1,7 @@
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.core.config import settings
-
 from src.api.auth import router as auth_router
 from src.api.content import router as content_router
 from src.api.platforms import router as platforms_router
@@ -13,20 +11,21 @@ from src.api.watchlist import router as watchlist_router
 from src.api.recommendations import router as recommendations_router
 from src.api.watchmode import router as watchmode_router
 
-
 app = FastAPI(
     title="OTT Content Aggregator API",
     description="Discover and search movies and TV shows.",
     version="0.1.0",
 )
 
+allowed_origins = [
+    origin.strip()
+    for origin in settings.cors_origins.split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        origin.strip()
-        for origin in settings.cors_origins.split(",")
-        if origin.strip()
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
