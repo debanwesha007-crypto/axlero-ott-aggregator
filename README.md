@@ -15,6 +15,8 @@ Axlero OTT Aggregator is a web-based application that helps users discover and e
 - Get content recommendations based on watchlist preferences
 - Redis caching support
 - REST API documentation using Swagger UI
+- Check real-time streaming availability across OTT platforms using Watchmode
+- View subscription, rental, and purchase options with provider links for India
 
 ## Technology Stack
 
@@ -25,6 +27,8 @@ Axlero OTT Aggregator is a web-based application that helps users discover and e
 **Authentication:** JWT
 
 **Testing:** Pytest, HTTPX
+
+**External API:** Watchmode API for OTT streaming availability
 
 ## Project Structure
 
@@ -50,6 +54,7 @@ axlero-ott-aggregator/
 - PostgreSQL
 - Redis
 - Git
+- Watchmode API key
 
 ## Backend Setup
 
@@ -77,6 +82,7 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
+Add your Watchmode API key as `WATCHMODE_API_KEY` in `.env`. Obtain your own API key from Watchmode. Never commit your actual API key.
 ```
 
 Update `.env` with your own database credentials, secret key, and Redis connection details. Never commit the actual `.env` file.
@@ -126,11 +132,17 @@ The production build is generated in `frontend/dist`.
 ## Project Scope
 
 The application focuses on OTT content discovery, aggregation, and user engagement. It does not directly host or stream movies or TV shows. Content availability depends on the data stored in the application.
+The application focuses on OTT content discovery, aggregation, and user engagement. It does not directly host or stream movies or TV shows. Streaming availability is retrieved through the Watchmode API and filtered for India. Availability and pricing may change depending on region and provider.
+## Data Attribution
+
+Streaming availability data is powered by [Watchmode](https://www.watchmode.com/).
+Availability information may be incomplete or change over time.
 
 ## Team
 
 Developed as an internship project by a two-member team.
 
----
+---MR YASH HON
+---MS ANWESHA DEB
 
 **Axlero OTT Aggregator**
