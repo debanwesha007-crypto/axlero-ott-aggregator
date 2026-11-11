@@ -6,6 +6,12 @@ class Settings(BaseSettings):
     secret_key: str
     access_token_expire_minutes: int = 30
 
+    redis_host: str = "127.0.0.1"
+    redis_port: int = 6379
+    redis_username: str = "default"
+    redis_password: str = ""
+    redis_ssl: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

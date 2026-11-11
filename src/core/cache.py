@@ -3,11 +3,14 @@ import redis
 from src.core.config import settings
 
 redis_client = redis.Redis(
-    host="127.0.0.1",
-    port=6379,
+    host=settings.redis_host,
+    port=settings.redis_port,
+    username=settings.redis_username,
+    password=settings.redis_password or None,
+    ssl=settings.redis_ssl,
     decode_responses=True,
-    socket_connect_timeout=0.3,
-    socket_timeout=0.3,
+    socket_connect_timeout=5,
+    socket_timeout=5,
 )
 
 
