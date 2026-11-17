@@ -368,6 +368,7 @@ function App() {
 
         if (!cancelled) {
           setMovies(formattedMovies);
+          setBackendConnected(true);
         }
       } catch (err) {
         if (!cancelled) {
