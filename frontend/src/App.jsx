@@ -14,7 +14,7 @@ import {
   loginUser,
   registerUser,
   searchWatchmodeTitles,
-getWatchmodeSources,
+  getWatchmodeSources,
 } from "./api";
 
 import "./App.css";
@@ -122,12 +122,12 @@ function App() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [showSignup, setShowSignup] = useState(false);
-const [signupName, setSignupName] = useState("");
-const [signupEmail, setSignupEmail] = useState("");
-const [signupPassword, setSignupPassword] = useState("");
-const [signupError, setSignupError] = useState("");
-const [signupSuccess, setSignupSuccess] = useState("");
-const [signupLoading, setSignupLoading] = useState(false);
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [signupError, setSignupError] = useState("");
+  const [signupSuccess, setSignupSuccess] = useState("");
+  const [signupLoading, setSignupLoading] = useState(false);
 
   // User profile
   const [profile, setProfile] = useState(null);
@@ -146,10 +146,11 @@ const [signupLoading, setSignupLoading] = useState(false);
 
   // Selected movie
   const [selectedMovie, setSelectedMovie] = useState(null);
+
   // Watchmode streaming availability
-const [streamingSources, setStreamingSources] = useState([]);
-const [streamingLoading, setStreamingLoading] = useState(false);
-const [streamingError, setStreamingError] = useState("");
+  const [streamingSources, setStreamingSources] = useState([]);
+  const [streamingLoading, setStreamingLoading] = useState(false);
+  const [streamingError, setStreamingError] = useState("");
 
   // Reviews
   const [reviews, setReviews] = useState([]);
@@ -163,97 +164,97 @@ const [streamingError, setStreamingError] = useState("");
   const [myReviewId, setMyReviewId] = useState(null);
 
   // --------------------------------------------------
-// Load Watchmode streaming sources
-// --------------------------------------------------
+  // Load Watchmode streaming sources
+  // --------------------------------------------------
 
-useEffect(() => {
-  let cancelled = false;
+  useEffect(() => {
+    let cancelled = false;
 
-  const loadStreamingSources = async () => {
-    if (!selectedMovie) {
-      setStreamingSources([]);
-      setStreamingError("");
-      setStreamingLoading(false);
-      return;
-    }
-
-    try {
-      setStreamingLoading(true);
-      setStreamingError("");
-      setStreamingSources([]);
-
-      const searchResponse = await searchWatchmodeTitles(
-        selectedMovie.title,
-        10
-      );
-
-      const results = getResponseItems(searchResponse, [
-        "title_results",
-        "results",
-        "items",
-      ]);
-
-      const normalizeTitle = (value) =>
-        String(value || "").trim().toLowerCase();
-
-      const exactMatches = results.filter(
-        (item) =>
-          normalizeTitle(item.name || item.title) ===
-          normalizeTitle(selectedMovie.title)
-      );
-
-      const movieYear = Number(
-        selectedMovie.release_year || selectedMovie.year
-      );
-
-      const matchedTitle =
-        exactMatches.find(
-          (item) =>
-            movieYear &&
-            Number(item.year) === movieYear
-        ) || exactMatches[0];
-
-      if (!matchedTitle?.id) {
-        throw new Error(
-          "Streaming information not found for this title."
-        );
-      }
-
-      const sourcesResponse = await getWatchmodeSources(
-        matchedTitle.id
-      );
-
-      const sources = getResponseItems(sourcesResponse, [
-        "sources",
-        "items",
-      ]);
-
-      const indiaSources = sources.filter(
-        (source) => source.region === "IN"
-      );
-
-      if (!cancelled) {
-        setStreamingSources(indiaSources);
-      }
-    } catch (err) {
-      if (!cancelled) {
-        setStreamingError(
-          getErrorMessage(err, "Unable to load streaming options.")
-        );
-      }
-    } finally {
-      if (!cancelled) {
+    const loadStreamingSources = async () => {
+      if (!selectedMovie) {
+        setStreamingSources([]);
+        setStreamingError("");
         setStreamingLoading(false);
+        return;
       }
-    }
-  };
 
-  loadStreamingSources();
+      try {
+        setStreamingLoading(true);
+        setStreamingError("");
+        setStreamingSources([]);
 
-  return () => {
-    cancelled = true;
-  };
-}, [selectedMovie]);
+        const searchResponse = await searchWatchmodeTitles(
+          selectedMovie.title,
+          10
+        );
+
+        const results = getResponseItems(searchResponse, [
+          "title_results",
+          "results",
+          "items",
+        ]);
+
+        const normalizeTitle = (value) =>
+          String(value || "").trim().toLowerCase();
+
+        const exactMatches = results.filter(
+          (item) =>
+            normalizeTitle(item.name || item.title) ===
+            normalizeTitle(selectedMovie.title)
+        );
+
+        const movieYear = Number(
+          selectedMovie.release_year || selectedMovie.year
+        );
+
+        const matchedTitle =
+          exactMatches.find(
+            (item) =>
+              movieYear &&
+              Number(item.year) === movieYear
+          ) || exactMatches[0];
+
+        if (!matchedTitle?.id) {
+          throw new Error(
+            "Streaming information not found for this title."
+          );
+        }
+
+        const sourcesResponse = await getWatchmodeSources(
+          matchedTitle.id
+        );
+
+        const sources = getResponseItems(sourcesResponse, [
+          "sources",
+          "items",
+        ]);
+
+        const indiaSources = sources.filter(
+          (source) => source.region === "IN"
+        );
+
+        if (!cancelled) {
+          setStreamingSources(indiaSources);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setStreamingError(
+            getErrorMessage(err, "Unable to load streaming options.")
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setStreamingLoading(false);
+        }
+      }
+    };
+
+    loadStreamingSources();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMovie]);
 
   // --------------------------------------------------
   // Keyboard shortcut: Ctrl/Cmd + K
@@ -289,11 +290,15 @@ useEffect(() => {
     let cancelled = false;
 
     const loadProfile = async () => {
-      if (!token) {
-        setProfile(null);
-        setProfileError("");
-        setProfileLoading(false);
-        setBackendConnected(false);
+      const authToken = token || null;
+
+      if (!authToken) {
+        if (!cancelled) {
+          setProfile(null);
+          setBackendConnected(false);
+          setProfileError("");
+          setProfileLoading(false);
+        }
         return;
       }
 
@@ -301,7 +306,7 @@ useEffect(() => {
         setProfileLoading(true);
         setProfileError("");
 
-        const response = await getMe(token);
+        const response = await getMe(authToken);
 
         if (!cancelled) {
           setProfile(response);
@@ -337,25 +342,27 @@ useEffect(() => {
     let cancelled = false;
 
     const loadContent = async () => {
-      if (!token) {
-        setMovies([]);
-        setLoading(false);
-        setError("");
-        return;
-      }
-
       try {
         setLoading(true);
         setError("");
 
-        const response = await getContent(token);
-        const content = getResponseItems(response, ["items", "content"]);
+        const response = await getContent(token || null);
+        const content = getResponseItems(response, [
+          "items",
+          "content",
+        ]);
 
         const formattedMovies = content.map((item) => ({
           ...item,
           year: item.release_year || item.year || "N/A",
-          platform: item.platform_name || item.platform || "Unknown",
-          type: item.content_type || item.type || "Movie",
+          platform:
+            item.platform_name ||
+            item.platform ||
+            "Unknown",
+          type:
+            item.content_type ||
+            item.type ||
+            "Movie",
           style: getMovieStyle(item.title),
         }));
 
@@ -391,10 +398,14 @@ useEffect(() => {
     let cancelled = false;
 
     const loadWatchlist = async () => {
-      if (!token) {
-        setWatchlist([]);
-        setWatchlistLoading(false);
-        setWatchlistError("");
+      const authToken = token || null;
+
+      if (!authToken) {
+        if (!cancelled) {
+          setWatchlist([]);
+          setWatchlistError("");
+          setWatchlistLoading(false);
+        }
         return;
       }
 
@@ -402,7 +413,7 @@ useEffect(() => {
         setWatchlistLoading(true);
         setWatchlistError("");
 
-        const response = await getWatchlist(token);
+        const response = await getWatchlist(authToken);
         const items = getResponseItems(response, [
           "items",
           "watchlist",
@@ -459,22 +470,25 @@ useEffect(() => {
         setReviewsLoading(true);
         setReviewsError("");
 
-        const [reviewsResponse, summaryResponse, myReviewsResponse] =
-          await Promise.all([
-            getReviews(token, selectedMovie.id),
-            getReviewSummary(token, selectedMovie.id),
-            getMyReviews(token),
-          ]);
-
-        const reviewItems = getResponseItems(reviewsResponse, [
-          "reviews",
-          "items",
+        const [
+          reviewsResponse,
+          summaryResponse,
+          myReviewsResponse,
+        ] = await Promise.all([
+          getReviews(token, selectedMovie.id),
+          getReviewSummary(token, selectedMovie.id),
+          getMyReviews(token),
         ]);
 
-        const myReviews = getResponseItems(myReviewsResponse, [
-          "reviews",
-          "items",
-        ]);
+        const reviewItems = getResponseItems(
+          reviewsResponse,
+          ["reviews", "items"]
+        );
+
+        const myReviews = getResponseItems(
+          myReviewsResponse,
+          ["reviews", "items"]
+        );
 
         const ownReview = myReviews.find((review) =>
           sameId(review.content_id, selectedMovie.id)
@@ -518,22 +532,25 @@ useEffect(() => {
       setReviewsLoading(true);
       setReviewsError("");
 
-      const [reviewsResponse, summaryResponse, myReviewsResponse] =
-        await Promise.all([
-          getReviews(token, selectedMovie.id),
-          getReviewSummary(token, selectedMovie.id),
-          getMyReviews(token),
-        ]);
-
-      const reviewItems = getResponseItems(reviewsResponse, [
-        "reviews",
-        "items",
+      const [
+        reviewsResponse,
+        summaryResponse,
+        myReviewsResponse,
+      ] = await Promise.all([
+        getReviews(token, selectedMovie.id),
+        getReviewSummary(token, selectedMovie.id),
+        getMyReviews(token),
       ]);
 
-      const myReviews = getResponseItems(myReviewsResponse, [
-        "reviews",
-        "items",
-      ]);
+      const reviewItems = getResponseItems(
+        reviewsResponse,
+        ["reviews", "items"]
+      );
+
+      const myReviews = getResponseItems(
+        myReviewsResponse,
+        ["reviews", "items"]
+      );
 
       const ownReview = myReviews.find((review) =>
         sameId(review.content_id, selectedMovie.id)
@@ -645,7 +662,8 @@ useEffect(() => {
     const uniqueCategories = new Set();
 
     movies.forEach((movie) => {
-      const rawCategory = movie.category || movie.genre || "";
+      const rawCategory =
+        movie.category || movie.genre || "";
 
       String(rawCategory)
         .split(",")
@@ -665,12 +683,18 @@ useEffect(() => {
     const normalizedSearch = search.trim().toLowerCase();
 
     return movies.filter((movie) => {
-      const title = String(movie.title || "").toLowerCase();
-      const platform = String(
-        movie.platform_name || movie.platform || ""
+      const title = String(
+        movie.title || ""
       ).toLowerCase();
 
-      const rawCategory = movie.category || movie.genre || "";
+      const platform = String(
+        movie.platform_name ||
+          movie.platform ||
+          ""
+      ).toLowerCase();
+
+      const rawCategory =
+        movie.category || movie.genre || "";
 
       const movieCategories = String(rawCategory)
         .split(",")
@@ -700,7 +724,9 @@ useEffect(() => {
   const heroMovie = useMemo(() => {
     return (
       movies.find(
-        (movie) => movie.backdrop_url || movie.poster_url
+        (movie) =>
+          movie.backdrop_url ||
+          movie.poster_url
       ) || movies[0]
     );
   }, [movies]);
@@ -718,20 +744,32 @@ useEffect(() => {
     const email = signupEmail.trim().toLowerCase();
 
     if (name.length < 2) {
-      setSignupError("Name must contain at least 2 characters.");
+      setSignupError(
+        "Name must contain at least 2 characters."
+      );
       return;
     }
 
     if (signupPassword.length < 8) {
-      setSignupError("Password must contain at least 8 characters.");
+      setSignupError(
+        "Password must contain at least 8 characters."
+      );
       return;
     }
 
     try {
       setSignupLoading(true);
-      await registerUser(name, email, signupPassword);
 
-      setSignupSuccess("Account created successfully. Please sign in.");
+      await registerUser(
+        name,
+        email,
+        signupPassword
+      );
+
+      setSignupSuccess(
+        "Account created successfully. Please sign in."
+      );
+
       setLoginEmail(email);
       setLoginPassword("");
       setSignupName("");
@@ -741,7 +779,10 @@ useEffect(() => {
       setShowLogin(true);
     } catch (err) {
       setSignupError(
-        getErrorMessage(err, "Registration failed. Please try again.")
+        getErrorMessage(
+          err,
+          "Registration failed. Please try again."
+        )
       );
     } finally {
       setSignupLoading(false);
@@ -772,7 +813,11 @@ useEffect(() => {
         );
       }
 
-      localStorage.setItem("axlero_token", accessToken);
+      localStorage.setItem(
+        "axlero_token",
+        accessToken
+      );
+
       setToken(accessToken);
 
       const userProfile = await getMe(accessToken);
@@ -789,7 +834,10 @@ useEffect(() => {
       setBackendConnected(false);
 
       setError(
-        getErrorMessage(err, "Login failed. Please try again.")
+        getErrorMessage(
+          err,
+          "Login failed. Please try again."
+        )
       );
     } finally {
       setLoading(false);
@@ -802,7 +850,9 @@ useEffect(() => {
 
   const connectBackend = async () => {
     if (!token) {
-      setError("Please sign in first to connect your backend.");
+      setError(
+        "Please sign in first to connect your backend."
+      );
       setBackendConnected(false);
       setShowLogin(true);
       return;
@@ -858,12 +908,17 @@ useEffect(() => {
     const movieId = movie.id;
 
     if (movieId == null) {
-      setWatchlistError("This title does not have a valid ID.");
+      setWatchlistError(
+        "This title does not have a valid ID."
+      );
       return;
     }
 
     const isSaved = watchlist.some((item) =>
-      sameId(getWatchlistId(item), movieId)
+      sameId(
+        getWatchlistId(item),
+        movieId
+      )
     );
 
     setUpdatingMovieId(movieId);
@@ -871,20 +926,34 @@ useEffect(() => {
 
     try {
       if (isSaved) {
-        await removeFromWatchlist(token, movieId);
+        await removeFromWatchlist(
+          token,
+          movieId
+        );
 
         setWatchlist((previous) =>
           previous.filter(
-            (item) => !sameId(getWatchlistId(item), movieId)
+            (item) =>
+              !sameId(
+                getWatchlistId(item),
+                movieId
+              )
           )
         );
       } else {
-        await addToWatchlist(token, movieId);
+        await addToWatchlist(
+          token,
+          movieId
+        );
 
         setWatchlist((previous) => {
-          const alreadySaved = previous.some((item) =>
-            sameId(getWatchlistId(item), movieId)
-          );
+          const alreadySaved =
+            previous.some((item) =>
+              sameId(
+                getWatchlistId(item),
+                movieId
+              )
+            );
 
           return alreadySaved
             ? previous
@@ -893,7 +962,10 @@ useEffect(() => {
       }
     } catch (err) {
       setWatchlistError(
-        getErrorMessage(err, "Could not update your watchlist.")
+        getErrorMessage(
+          err,
+          "Could not update your watchlist."
+        )
       );
     } finally {
       setUpdatingMovieId(null);
@@ -922,7 +994,9 @@ useEffect(() => {
       .map((item) => {
         const id = getWatchlistId(item);
 
-        return movies.find((movie) => sameId(movie.id, id));
+        return movies.find((movie) =>
+          sameId(movie.id, id)
+        );
       })
       .filter(Boolean);
   }, [watchlist, movies]);
@@ -944,9 +1018,13 @@ useEffect(() => {
         <nav className="side-nav">
           <button
             className={`nav-item ${
-              activePage === "home" ? "active" : ""
+              activePage === "home"
+                ? "active"
+                : ""
             }`}
-            onClick={() => navigateTo("home")}
+            onClick={() =>
+              navigateTo("home")
+            }
           >
             <span className="nav-icon">⌂</span>
             <span>Home</span>
@@ -954,9 +1032,13 @@ useEffect(() => {
 
           <button
             className={`nav-item ${
-              activePage === "browse" ? "active" : ""
+              activePage === "browse"
+                ? "active"
+                : ""
             }`}
-            onClick={() => navigateTo("browse")}
+            onClick={() =>
+              navigateTo("browse")
+            }
           >
             <span className="nav-icon">▦</span>
             <span>Browse</span>
@@ -964,9 +1046,13 @@ useEffect(() => {
 
           <button
             className={`nav-item ${
-              activePage === "watchlist" ? "active" : ""
+              activePage === "watchlist"
+                ? "active"
+                : ""
             }`}
-            onClick={() => navigateTo("watchlist")}
+            onClick={() =>
+              navigateTo("watchlist")
+            }
           >
             <span className="nav-icon">♡</span>
             <span>My Watchlist</span>
@@ -974,16 +1060,22 @@ useEffect(() => {
 
           <button
             className={`nav-item ${
-              activePage === "profile" ? "active" : ""
+              activePage === "profile"
+                ? "active"
+                : ""
             }`}
-            onClick={() => navigateTo("profile")}
+            onClick={() =>
+              navigateTo("profile")
+            }
           >
             <span className="nav-icon">♙</span>
             <span>Profile</span>
           </button>
         </nav>
 
-        <div className="sidebar-label">STREAMING PLATFORMS</div>
+        <div className="sidebar-label">
+          STREAMING PLATFORMS
+        </div>
 
         <div className="platform-list">
           {[
@@ -1011,7 +1103,9 @@ useEffect(() => {
           <div className="connection-status">
             <span
               className={`status-dot ${
-                backendConnected ? "connected" : "disconnected"
+                backendConnected
+                  ? "connected"
+                  : "disconnected"
               }`}
             />
 
@@ -1022,25 +1116,26 @@ useEffect(() => {
             </span>
           </div>
 
-         {backendConnected ? (
-  <button
-    className="sidebar-action"
-    onClick={disconnectBackend}
-  >
-    Logout
-  </button>
-) : (
-  <button
-    className="sidebar-action"
-    onClick={() => {
-      setShowSignup(false);
-      setShowLogin(true);
-    }}
-    disabled={loading}
-  >
-    Sign in
-  </button>
-)}</div>
+          {backendConnected ? (
+            <button
+              className="sidebar-action"
+              onClick={disconnectBackend}
+            >
+              Logout
+            </button>
+          ) : (
+            <button
+              className="sidebar-action"
+              onClick={() => {
+                setShowSignup(false);
+                setShowLogin(true);
+              }}
+              disabled={loading}
+            >
+              Sign in
+            </button>
+          )}
+        </div>
       </aside>
 
       <main className="main-content">
@@ -1066,15 +1161,21 @@ useEffect(() => {
                 }
               />
 
-              <span className="search-shortcut">⌘ K</span>
+              <span className="search-shortcut">
+                ⌘ K
+              </span>
             </div>
 
             <button
               className="profile-button"
-              onClick={() => navigateTo("profile")}
+              onClick={() =>
+                navigateTo("profile")
+              }
               title="Open profile"
             >
-              {profile?.name?.charAt(0)?.toUpperCase() || "U"}
+              {profile?.name
+                ?.charAt(0)
+                ?.toUpperCase() || "U"}
             </button>
           </div>
         </header>
@@ -1088,7 +1189,10 @@ useEffect(() => {
 
               <h2>
                 Welcome back
-                {profile?.name ? `, ${profile.name}` : ""}!
+                {profile?.name
+                  ? `, ${profile.name}`
+                  : ""}
+                !
               </h2>
 
               <p className="welcome-subtitle">
@@ -1097,8 +1201,12 @@ useEffect(() => {
             </div>
 
             <div className="welcome-badge">
-              <span className="welcome-badge-icon">✦</span>
-              <span>One place. Every platform.</span>
+              <span className="welcome-badge-icon">
+                ✦
+              </span>
+              <span>
+                One place. Every platform.
+              </span>
             </div>
           </section>
 
@@ -1108,7 +1216,10 @@ useEffect(() => {
                 <h3>Sign in to Axlero</h3>
 
                 {signupSuccess && (
-                  <p className="signup-success" role="status">
+                  <p
+                    className="signup-success"
+                    role="status"
+                  >
                     {signupSuccess}
                   </p>
                 )}
@@ -1122,7 +1233,9 @@ useEffect(() => {
                   type="email"
                   value={loginEmail}
                   onChange={(event) =>
-                    setLoginEmail(event.target.value)
+                    setLoginEmail(
+                      event.target.value
+                    )
                   }
                   placeholder="Enter your email"
                   autoComplete="email"
@@ -1138,7 +1251,9 @@ useEffect(() => {
                   type="password"
                   value={loginPassword}
                   onChange={(event) =>
-                    setLoginPassword(event.target.value)
+                    setLoginPassword(
+                      event.target.value
+                    )
                   }
                   placeholder="Enter your password"
                   autoComplete="current-password"
@@ -1150,7 +1265,9 @@ useEffect(() => {
                   className="primary-button"
                   disabled={loading}
                 >
-                  {loading ? "Signing in..." : "Sign in"}
+                  {loading
+                    ? "Signing in..."
+                    : "Sign in"}
                 </button>
 
                 <button
@@ -1169,7 +1286,9 @@ useEffect(() => {
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => setShowLogin(false)}
+                  onClick={() =>
+                    setShowLogin(false)
+                  }
                   disabled={loading}
                 >
                   Cancel
@@ -1181,20 +1300,32 @@ useEffect(() => {
           {showSignup && !token && (
             <section className="backend-notice login-notice signup-notice">
               <form onSubmit={handleSignup}>
-                <h3>Create your Axlero account</h3>
+                <h3>
+                  Create your Axlero account
+                </h3>
 
                 {signupError && (
-                  <p className="inline-error" role="alert">
+                  <p
+                    className="inline-error"
+                    role="alert"
+                  >
                     {signupError}
                   </p>
                 )}
 
-                <label htmlFor="axlero-signup-name">Full name</label>
+                <label htmlFor="axlero-signup-name">
+                  Full name
+                </label>
+
                 <input
                   id="axlero-signup-name"
                   type="text"
                   value={signupName}
-                  onChange={(event) => setSignupName(event.target.value)}
+                  onChange={(event) =>
+                    setSignupName(
+                      event.target.value
+                    )
+                  }
                   placeholder="Enter your name"
                   autoComplete="name"
                   minLength={2}
@@ -1202,23 +1333,37 @@ useEffect(() => {
                   required
                 />
 
-                <label htmlFor="axlero-signup-email">Email</label>
+                <label htmlFor="axlero-signup-email">
+                  Email
+                </label>
+
                 <input
                   id="axlero-signup-email"
                   type="email"
                   value={signupEmail}
-                  onChange={(event) => setSignupEmail(event.target.value)}
+                  onChange={(event) =>
+                    setSignupEmail(
+                      event.target.value
+                    )
+                  }
                   placeholder="Enter your email"
                   autoComplete="email"
                   required
                 />
 
-                <label htmlFor="axlero-signup-password">Password</label>
+                <label htmlFor="axlero-signup-password">
+                  Password
+                </label>
+
                 <input
                   id="axlero-signup-password"
                   type="password"
                   value={signupPassword}
-                  onChange={(event) => setSignupPassword(event.target.value)}
+                  onChange={(event) =>
+                    setSignupPassword(
+                      event.target.value
+                    )
+                  }
                   placeholder="At least 8 characters"
                   autoComplete="new-password"
                   minLength={8}
@@ -1231,7 +1376,9 @@ useEffect(() => {
                   className="primary-button"
                   disabled={signupLoading}
                 >
-                  {signupLoading ? "Creating account..." : "Sign up"}
+                  {signupLoading
+                    ? "Creating account..."
+                    : "Sign up"}
                 </button>
 
                 <button
@@ -1258,13 +1405,15 @@ useEffect(() => {
                 </strong>
 
                 <p>
-                  Sign in and connect to load your personal
-                  watchlist and reviews.
+                  Sign in and connect to load your
+                  personal watchlist and reviews.
                 </p>
               </div>
 
               <button
-                onClick={() => setShowLogin(true)}
+                onClick={() =>
+                  setShowLogin(true)
+                }
                 disabled={loading}
                 className="primary-button"
               >
@@ -1277,18 +1426,25 @@ useEffect(() => {
             <section className="profile-section">
               <div className="section-heading">
                 <div>
-                  <p className="section-eyebrow">ACCOUNT</p>
+                  <p className="section-eyebrow">
+                    ACCOUNT
+                  </p>
                   <h2>My Profile</h2>
                 </div>
               </div>
 
               <div className="profile-card">
                 <div className="profile-avatar">
-                  {profile?.name?.charAt(0)?.toUpperCase() || "U"}
+                  {profile?.name
+                    ?.charAt(0)
+                    ?.toUpperCase() || "U"}
                 </div>
 
                 <div className="profile-details">
-                  <h3>{profile?.name || "Guest User"}</h3>
+                  <h3>
+                    {profile?.name ||
+                      "Guest User"}
+                  </h3>
 
                   <p>
                     {profile?.email ||
@@ -1304,75 +1460,96 @@ useEffect(() => {
                   </span>
 
                   {profileError && (
-                    <p className="inline-error">{profileError}</p>
+                    <p className="inline-error">
+                      {profileError}
+                    </p>
                   )}
                 </div>
               </div>
             </section>
           ) : (
             <>
-              {activePage === "home" && heroMovie && (
-                <section className="hero-banner">
-                  <div className="hero-glow" />
+              {activePage === "home" &&
+                heroMovie && (
+                  <section className="hero-banner">
+                    <div className="hero-glow" />
 
-                  <div className="hero-copy">
-                    <span className="hero-kicker">
-                      FEATURED DISCOVERY
-                    </span>
+                    <div className="hero-copy">
+                      <span className="hero-kicker">
+                        FEATURED DISCOVERY
+                      </span>
 
-                    <h2>{heroMovie.title}</h2>
+                      <h2>
+                        {heroMovie.title}
+                      </h2>
 
-                    <p>
-                      {heroMovie.description ||
-                        "Discover something unforgettable to watch today."}
-                    </p>
+                      <p>
+                        {heroMovie.description ||
+                          "Discover something unforgettable to watch today."}
+                      </p>
 
-                    <div className="hero-actions">
-                      <button
-                        className="primary-button"
-                        onClick={() =>
-                          setSelectedMovie(heroMovie)
-                        }
-                      >
-                        <span>▶</span> View Details
-                      </button>
+                      <div className="hero-actions">
+                        <button
+                          className="primary-button"
+                          onClick={() =>
+                            setSelectedMovie(
+                              heroMovie
+                            )
+                          }
+                        >
+                          <span>▶</span>{" "}
+                          View Details
+                        </button>
 
-                      <button
-                        className="secondary-button"
-                        onClick={() =>
-                          toggleWatchlist(heroMovie)
-                        }
-                      >
-                        <span>＋</span> Add to Watchlist
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="hero-art">
-                    {heroMovie.backdrop_url ||
-                    heroMovie.poster_url ? (
-                      <img
-                        src={
-                          heroMovie.backdrop_url ||
-                          heroMovie.poster_url
-                        }
-                        alt={heroMovie.title}
-                      />
-                    ) : (
-                      <div className="hero-art-fallback">
-                        {getMovieStyle(heroMovie.title).emoji}
+                        <button
+                          className="secondary-button"
+                          onClick={() =>
+                            toggleWatchlist(
+                              heroMovie
+                            )
+                          }
+                        >
+                          <span>＋</span>{" "}
+                          Add to Watchlist
+                        </button>
                       </div>
-                    )}
-                  </div>
-                </section>
-              )}
+                    </div>
+
+                    <div className="hero-art">
+                      {heroMovie.backdrop_url ||
+                      heroMovie.poster_url ? (
+                        <img
+                          src={
+                            heroMovie.backdrop_url ||
+                            heroMovie.poster_url
+                          }
+                          alt={
+                            heroMovie.title
+                          }
+                        />
+                      ) : (
+                        <div className="hero-art-fallback">
+                          {
+                            getMovieStyle(
+                              heroMovie.title
+                            ).emoji
+                          }
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
 
               {error && (
                 <div className="error-message">
                   <span>!</span>
                   <p>{error}</p>
 
-                  <button onClick={() => setError("")}>
+                  <button
+                    onClick={() =>
+                      setError("")
+                    }
+                  >
                     Dismiss
                   </button>
                 </div>
@@ -1384,7 +1561,9 @@ useEffect(() => {
                   <p>{watchlistError}</p>
 
                   <button
-                    onClick={() => setWatchlistError("")}
+                    onClick={() =>
+                      setWatchlistError("")
+                    }
                   >
                     Dismiss
                   </button>
@@ -1395,51 +1574,65 @@ useEffect(() => {
                 <div className="section-heading">
                   <div>
                     <p className="section-eyebrow">
-                      {activePage === "watchlist"
+                      {activePage ===
+                      "watchlist"
                         ? "YOUR SAVED TITLES"
-                        : activePage === "browse"
+                        : activePage ===
+                          "browse"
                         ? "EXPLORE THE COLLECTION"
                         : "PICK UP SOMETHING NEW"}
                     </p>
 
                     <h2>
-                      {activePage === "watchlist"
+                      {activePage ===
+                      "watchlist"
                         ? "My Watchlist"
-                        : activePage === "browse"
+                        : activePage ===
+                          "browse"
                         ? "Browse Catalog"
                         : "Trending Now"}
                     </h2>
                   </div>
 
                   <span className="result-count">
-                    {activePage === "watchlist"
+                    {activePage ===
+                    "watchlist"
                       ? watchlist.length
                       : filteredMovies.length}{" "}
                     titles
                   </span>
                 </div>
 
-                {activePage !== "watchlist" && (
+                {activePage !==
+                  "watchlist" && (
                   <div className="category-row">
-                    {categories.map((categoryItem) => (
-                      <button
-                        key={categoryItem}
-                        className={`category-chip ${
-                          activeCategory === categoryItem
-                            ? "selected"
-                            : ""
-                        }`}
-                        onClick={() =>
-                          setActiveCategory(categoryItem)
-                        }
-                      >
-                        {categoryItem}
-                      </button>
-                    ))}
+                    {categories.map(
+                      (categoryItem) => (
+                        <button
+                          key={
+                            categoryItem
+                          }
+                          className={`category-chip ${
+                            activeCategory ===
+                            categoryItem
+                              ? "selected"
+                              : ""
+                          }`}
+                          onClick={() =>
+                            setActiveCategory(
+                              categoryItem
+                            )
+                          }
+                        >
+                          {categoryItem}
+                        </button>
+                      )
+                    )}
                   </div>
                 )}
 
-                {activePage === "watchlist" &&
+                {activePage ===
+                  "watchlist" &&
                   watchlistError && (
                     <p className="inline-error">
                       {watchlistError}
@@ -1452,7 +1645,8 @@ useEffect(() => {
                   </p>
                 )}
 
-                {activePage === "watchlist" &&
+                {activePage ===
+                  "watchlist" &&
                   watchlistLoading && (
                     <p className="review-message">
                       Loading watchlist...
@@ -1460,16 +1654,26 @@ useEffect(() => {
                   )}
 
                 <div className="movie-grid">
-                  {(activePage === "watchlist"
+                  {(activePage ===
+                  "watchlist"
                     ? watchlistMovies
                     : filteredMovies
                   ).map((movie) => {
-                    const movieStyle = getMovieStyle(movie.title);
+                    const movieStyle =
+                      getMovieStyle(
+                        movie.title
+                      );
 
-                    const isInWatchlist = watchlist.some(
-                      (item) =>
-                        sameId(getWatchlistId(item), movie.id)
-                    );
+                    const isInWatchlist =
+                      watchlist.some(
+                        (item) =>
+                          sameId(
+                            getWatchlistId(
+                              item
+                            ),
+                            movie.id
+                          )
+                      );
 
                     return (
                       <article
@@ -1479,28 +1683,39 @@ useEffect(() => {
                         <button
                           className="movie-poster"
                           onClick={() =>
-                            setSelectedMovie(movie)
+                            setSelectedMovie(
+                              movie
+                            )
                           }
                         >
                           {movie.poster_url ? (
                             <img
-                              src={movie.poster_url}
-                              alt={movie.title}
+                              src={
+                                movie.poster_url
+                              }
+                              alt={
+                                movie.title
+                              }
                               className="poster-image"
                             />
                           ) : (
                             <div
                               className="poster-fallback"
                               style={{
-                                background: movieStyle.color,
+                                background:
+                                  movieStyle.color,
                               }}
                             >
                               <span className="poster-emoji">
-                                {movieStyle.emoji}
+                                {
+                                  movieStyle.emoji
+                                }
                               </span>
 
                               <span className="poster-title">
-                                {movie.title}
+                                {
+                                  movie.title
+                                }
                               </span>
                             </div>
                           )}
@@ -1514,13 +1729,18 @@ useEffect(() => {
 
                         <button
                           className={`card-watchlist ${
-                            isInWatchlist ? "saved" : ""
+                            isInWatchlist
+                              ? "saved"
+                              : ""
                           }`}
                           onClick={() =>
-                            toggleWatchlist(movie)
+                            toggleWatchlist(
+                              movie
+                            )
                           }
                           disabled={
-                            updatingMovieId === movie.id
+                            updatingMovieId ===
+                            movie.id
                           }
                           title={
                             isInWatchlist
@@ -1528,7 +1748,8 @@ useEffect(() => {
                               : "Add to watchlist"
                           }
                         >
-                          {updatingMovieId === movie.id
+                          {updatingMovieId ===
+                          movie.id
                             ? "…"
                             : isInWatchlist
                             ? "♥"
@@ -1538,7 +1759,9 @@ useEffect(() => {
                         <div className="movie-info">
                           <div className="movie-title-row">
                             <h3 className="movie-title">
-                              {movie.title}
+                              {
+                                movie.title
+                              }
                             </h3>
 
                             <span className="movie-year">
@@ -1557,7 +1780,8 @@ useEffect(() => {
 
                             {movie.rating && (
                               <span className="movie-rating">
-                                ★ {movie.rating}
+                                ★{" "}
+                                {movie.rating}
                               </span>
                             )}
                           </div>
@@ -1567,30 +1791,42 @@ useEffect(() => {
                   })}
                 </div>
 
-                {(activePage === "watchlist"
-                  ? watchlistMovies.length === 0 &&
+                {(activePage ===
+                "watchlist"
+                  ? watchlistMovies.length ===
+                      0 &&
                     !watchlistLoading
-                  : filteredMovies.length === 0 &&
+                  : filteredMovies.length ===
+                      0 &&
                     !loading) && (
                   <div className="empty-state">
-                    <div className="empty-state-icon">✦</div>
+                    <div className="empty-state-icon">
+                      ✦
+                    </div>
 
                     <h3>
-                      {activePage === "watchlist"
+                      {activePage ===
+                      "watchlist"
                         ? "Your watchlist is empty"
                         : "No titles found"}
                     </h3>
 
                     <p>
-                      {activePage === "watchlist"
+                      {activePage ===
+                      "watchlist"
                         ? "Save movies and shows here to find them later."
                         : "Try another search or select a different category."}
                     </p>
 
-                    {activePage === "watchlist" && (
+                    {activePage ===
+                      "watchlist" && (
                       <button
                         className="primary-button"
-                        onClick={() => navigateTo("browse")}
+                        onClick={() =>
+                          navigateTo(
+                            "browse"
+                          )
+                        }
                       >
                         Explore Catalog
                       </button>
@@ -1606,7 +1842,9 @@ useEffect(() => {
               © {new Date().getFullYear()} Axlero
             </span>
 
-            <span>Discover. Save. Stream.</span>
+            <span>
+              Discover. Save. Stream.
+            </span>
           </footer>
         </div>
       </main>
@@ -1614,15 +1852,21 @@ useEffect(() => {
       {selectedMovie && (
         <div
           className="modal-backdrop"
-          onClick={() => setSelectedMovie(null)}
+          onClick={() =>
+            setSelectedMovie(null)
+          }
         >
           <div
             className="details-modal"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) =>
+              event.stopPropagation()
+            }
           >
             <button
               className="modal-close"
-              onClick={() => setSelectedMovie(null)}
+              onClick={() =>
+                setSelectedMovie(null)
+              }
               aria-label="Close details"
             >
               ×
@@ -1631,12 +1875,20 @@ useEffect(() => {
             <div className="modal-art">
               {selectedMovie.poster_url ? (
                 <img
-                  src={selectedMovie.poster_url}
-                  alt={selectedMovie.title}
+                  src={
+                    selectedMovie.poster_url
+                  }
+                  alt={
+                    selectedMovie.title
+                  }
                 />
               ) : (
                 <div className="modal-art-fallback">
-                  {getMovieStyle(selectedMovie.title).emoji}
+                  {
+                    getMovieStyle(
+                      selectedMovie.title
+                    ).emoji
+                  }
                 </div>
               )}
             </div>
@@ -1646,7 +1898,9 @@ useEffect(() => {
                 MOVIE DETAILS
               </p>
 
-              <h2>{selectedMovie.title}</h2>
+              <h2>
+                {selectedMovie.title}
+              </h2>
 
               <div className="modal-meta">
                 <span>
@@ -1676,19 +1930,26 @@ useEffect(() => {
               <button
                 className="primary-button"
                 onClick={() =>
-                  toggleWatchlist(selectedMovie)
+                  toggleWatchlist(
+                    selectedMovie
+                  )
                 }
                 disabled={
-                  updatingMovieId === selectedMovie.id
+                  updatingMovieId ===
+                  selectedMovie.id
                 }
               >
-                {updatingMovieId === selectedMovie.id
+                {updatingMovieId ===
+                selectedMovie.id
                   ? "Updating..."
-                  : watchlist.some((item) =>
-                      sameId(
-                        getWatchlistId(item),
-                        selectedMovie.id
-                      )
+                  : watchlist.some(
+                      (item) =>
+                        sameId(
+                          getWatchlistId(
+                            item
+                          ),
+                          selectedMovie.id
+                        )
                     )
                   ? "♥ Remove from Watchlist"
                   : "♡ Add to Watchlist"}
@@ -1701,77 +1962,111 @@ useEffect(() => {
                     <p className="section-eyebrow">
                       WHERE TO WATCH
                     </p>
-                    <h3>Available in India</h3>
+
+                    <h3>
+                      Available in India
+                    </h3>
                   </div>
                 </div>
 
                 {streamingLoading && (
                   <p className="streaming-message">
-                    Checking streaming availability...
-                  </p>
-                )}
-
-                {!streamingLoading && streamingError && (
-                  <p className="streaming-message">
-                    {streamingError}
+                    Checking streaming
+                    availability...
                   </p>
                 )}
 
                 {!streamingLoading &&
-                  !streamingError &&
-                  streamingSources.length === 0 && (
+                  streamingError && (
                     <p className="streaming-message">
-                      No streaming options currently available in India.
+                      {streamingError}
                     </p>
                   )}
 
                 {!streamingLoading &&
-                  streamingSources.length > 0 && (
+                  !streamingError &&
+                  streamingSources.length ===
+                    0 && (
+                    <p className="streaming-message">
+                      No streaming options
+                      currently available in
+                      India.
+                    </p>
+                  )}
+
+                {!streamingLoading &&
+                  streamingSources.length >
+                    0 && (
                     <div className="streaming-list">
-                      {streamingSources.map((source, index) => (
-                        <div
-                          className="streaming-card"
-                          key={`${source.source_id}-${source.type}-${index}`}
-                        >
-                          <div className="streaming-provider">
-                            <strong>{source.name}</strong>
-                            <span>
-                              {source.type === "sub"
-                                ? "Subscription"
-                                : source.type === "rent"
-                                ? "Rent"
-                                : source.type === "buy"
-                                ? "Buy"
-                                : source.type}
-                            </span>
-                          </div>
+                      {streamingSources.map(
+                        (
+                          source,
+                          index
+                        ) => (
+                          <div
+                            className="streaming-card"
+                            key={`${source.source_id}-${source.type}-${index}`}
+                          >
+                            <div className="streaming-provider">
+                              <strong>
+                                {
+                                  source.name
+                                }
+                              </strong>
 
-                          <div className="streaming-details">
-                            {source.format && (
-                              <span>{source.format}</span>
+                              <span>
+                                {source.type ===
+                                "sub"
+                                  ? "Subscription"
+                                  : source.type ===
+                                    "rent"
+                                  ? "Rent"
+                                  : source.type ===
+                                    "buy"
+                                  ? "Buy"
+                                  : source.type}
+                              </span>
+                            </div>
+
+                            <div className="streaming-details">
+                              {source.format && (
+                                <span>
+                                  {
+                                    source.format
+                                  }
+                                </span>
+                              )}
+
+                              {source.price !=
+                                null && (
+                                <span>
+                                  ₹
+                                  {
+                                    source.price
+                                  }
+                                </span>
+                              )}
+                            </div>
+
+                            {source.web_url && (
+                              <a
+                                href={
+                                  source.web_url
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="streaming-link"
+                              >
+                                View on platform
+                                ↗
+                              </a>
                             )}
-
-                            {source.price != null && (
-                              <span>₹{source.price}</span>
-                            )}
                           </div>
-
-                          {source.web_url && (
-                            <a
-                              href={source.web_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="streaming-link"
-                            >
-                              View on platform ↗
-                            </a>
-                          )}
-                        </div>
-                      ))}
+                        )
+                      )}
                     </div>
                   )}
               </section>
-
 
               <section className="reviews-section">
                 <div className="section-heading">
@@ -1785,7 +2080,8 @@ useEffect(() => {
 
                   {reviewSummary && (
                     <span className="result-count">
-                      {reviewSummary.average_rating != null
+                      {reviewSummary.average_rating !=
+                      null
                         ? `★ ${reviewSummary.average_rating}`
                         : "No rating yet"}
                     </span>
@@ -1802,72 +2098,87 @@ useEffect(() => {
                   </p>
                 ) : reviews.length === 0 ? (
                   <p className="review-message">
-                    No reviews yet. Be the first to share
-                    your thoughts.
+                    No reviews yet. Be the
+                    first to share your
+                    thoughts.
                   </p>
                 ) : (
                   <div className="review-list">
-                    {reviews.map((review) => {
-                      const isOwnReview =
-                        sameId(
-                          review.user_id,
-                          profile?.id
-                        ) ||
-                        sameId(review.id, myReviewId);
+                    {reviews.map(
+                      (review) => {
+                        const isOwnReview =
+                          sameId(
+                            review.user_id,
+                            profile?.id
+                          ) ||
+                          sameId(
+                            review.id,
+                            myReviewId
+                          );
 
-                      return (
-                        <article
-                          className="review-card"
-                          key={review.id}
-                        >
-                          <div className="review-card-heading">
-                            <strong>
-                              {review.user_name ||
-                                review.username ||
-                                "User"}
-                            </strong>
+                        return (
+                          <article
+                            className="review-card"
+                            key={
+                              review.id
+                            }
+                          >
+                            <div className="review-card-heading">
+                              <strong>
+                                {review.user_name ||
+                                  review.username ||
+                                  "User"}
+                              </strong>
 
-                            <span>
-                              {"★".repeat(
-                                Number(review.rating) || 0
-                              )}
-                            </span>
-                          </div>
-
-                          <p>
-                            {review.review_text ||
-                              review.comment ||
-                              ""}
-                          </p>
-
-                          {isOwnReview && (
-                            <div className="review-actions">
-                              <button
-                                onClick={() =>
-                                  beginEditReview(review)
-                                }
-                              >
-                                Edit
-                              </button>
-
-                              <button
-                                onClick={() =>
-                                  removeReview(review.id)
-                                }
-                              >
-                                Delete
-                              </button>
+                              <span>
+                                {"★".repeat(
+                                  Number(
+                                    review.rating
+                                  ) || 0
+                                )}
+                              </span>
                             </div>
-                          )}
-                        </article>
-                      );
-                    })}
+
+                            <p>
+                              {review.review_text ||
+                                review.comment ||
+                                ""}
+                            </p>
+
+                            {isOwnReview && (
+                              <div className="review-actions">
+                                <button
+                                  onClick={() =>
+                                    beginEditReview(
+                                      review
+                                    )
+                                  }
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  onClick={() =>
+                                    removeReview(
+                                      review.id
+                                    )
+                                  }
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </article>
+                        );
+                      }
+                    )}
                   </div>
                 )}
 
                 {!token && (
                   <p className="review-message">
-                    Please sign in to write or manage reviews.
+                    Please sign in to write or
+                    manage reviews.
                   </p>
                 )}
 
@@ -1890,20 +2201,29 @@ useEffect(() => {
                     value={reviewRating}
                     onChange={(event) =>
                       setReviewRating(
-                        Number(event.target.value)
+                        Number(
+                          event.target.value
+                        )
                       )
                     }
-                    disabled={!token || reviewSubmitting}
+                    disabled={
+                      !token ||
+                      reviewSubmitting
+                    }
                   >
-                    {[5, 4, 3, 2, 1].map((rating) => (
-                      <option
-                        key={rating}
-                        value={rating}
-                      >
-                        {rating}{" "}
-                        {rating === 1 ? "star" : "stars"}
-                      </option>
-                    ))}
+                    {[5, 4, 3, 2, 1].map(
+                      (rating) => (
+                        <option
+                          key={rating}
+                          value={rating}
+                        >
+                          {rating}{" "}
+                          {rating === 1
+                            ? "star"
+                            : "stars"}
+                        </option>
+                      )
+                    )}
                   </select>
 
                   <label htmlFor="review-text">
@@ -1914,18 +2234,26 @@ useEffect(() => {
                     id="review-text"
                     value={reviewText}
                     onChange={(event) =>
-                      setReviewText(event.target.value)
+                      setReviewText(
+                        event.target.value
+                      )
                     }
                     placeholder="What did you think about this title?"
                     rows={3}
-                    disabled={!token || reviewSubmitting}
+                    disabled={
+                      !token ||
+                      reviewSubmitting
+                    }
                   />
 
                   <div className="review-form-actions">
                     <button
                       type="submit"
                       className="primary-button"
-                      disabled={!token || reviewSubmitting}
+                      disabled={
+                        !token ||
+                        reviewSubmitting
+                      }
                     >
                       {reviewSubmitting
                         ? "Submitting..."
@@ -1939,11 +2267,15 @@ useEffect(() => {
                         type="button"
                         className="secondary-button"
                         onClick={() => {
-                          setEditingReviewId(null);
+                          setEditingReviewId(
+                            null
+                          );
                           setReviewText("");
                           setReviewRating(5);
                         }}
-                        disabled={reviewSubmitting}
+                        disabled={
+                          reviewSubmitting
+                        }
                       >
                         Cancel
                       </button>
